@@ -1,0 +1,1003 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>AI Feed · Dispatch</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml" />
+<link rel="shortcut icon" href="favicon.svg" type="image/svg+xml" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT@0,9..144,300..900,0..100;1,9..144,300..900,0..100&family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="style.css?v=20260511-gorden-digest4" />
+</head>
+<body>
+
+<!-- Ambient paper texture / ink grain via SVG noise -->
+<svg class="grain" aria-hidden="true"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.12 0"/></filter><rect width="100%" height="100%" filter="url(#n)"/></svg>
+
+<header class="masthead">
+  <div class="masthead-left">
+    <div class="wordmark">
+      <span class="wordmark-ai">AI</span><span class="wordmark-feed">Feed</span>
+      <span class="wordmark-mark"></span>
+    </div>
+    <div class="tagline">DAILY DISPATCH · <span id="tag-days">–</span> EDITIONS</div>
+  </div>
+
+  <div class="masthead-center">
+    <div class="search-box">
+      <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M11 11l3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/></svg>
+      <input id="search" type="search" placeholder="搜索标题 · 摘要 · 作者" autocomplete="off" />
+      <kbd class="kbd">/</kbd>
+    </div>
+  </div>
+
+  <div class="masthead-right">
+    <span class="topbar-status" id="refresh-status" aria-live="polite"></span>
+    <button class="icon-btn" id="refresh-btn" title="刷新最近 60 分钟 (R)" aria-label="refresh">
+      <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M16.5 10A6.5 6.5 0 1 1 14.8 5.7"/>
+        <path d="M12.8 3.5h3.7v3.7"/>
+      </svg>
+    </button>
+    <button class="icon-btn" id="theme-btn" title="切换主题 (T)" aria-label="theme">
+      <svg class="i-sun" viewBox="0 0 20 20" width="16" height="16"><circle cx="10" cy="10" r="3.5" fill="none" stroke="currentColor" stroke-width="1.5"/><g stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="10" y1="1.5" x2="10" y2="3.5"/><line x1="10" y1="16.5" x2="10" y2="18.5"/><line x1="1.5" y1="10" x2="3.5" y2="10"/><line x1="16.5" y1="10" x2="18.5" y2="10"/><line x1="4" y1="4" x2="5.5" y2="5.5"/><line x1="14.5" y1="14.5" x2="16" y2="16"/><line x1="16" y1="4" x2="14.5" y2="5.5"/><line x1="5.5" y1="14.5" x2="4" y2="16"/></g></svg>
+      <svg class="i-moon" viewBox="0 0 20 20" width="16" height="16"><path d="M15.5 12a6.5 6.5 0 01-8-8 .7.7 0 00-1-.8 8 8 0 109.8 9.8.7.7 0 00-.8-1z" fill="currentColor"/></svg>
+    </button>
+    <button class="icon-btn" id="settings-btn" title="设置 (,)" aria-label="settings" aria-haspopup="dialog" aria-controls="settings-modal" aria-expanded="false">
+      <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+        <line x1="4" y1="5" x2="16" y2="5"/><circle cx="8" cy="5" r="1.6"/>
+        <line x1="4" y1="10" x2="16" y2="10"/><circle cx="12.5" cy="10" r="1.6"/>
+        <line x1="4" y1="15" x2="16" y2="15"/><circle cx="6.5" cy="15" r="1.6"/>
+      </svg>
+    </button>
+    <button class="icon-btn" id="digest-btn" title="查看 Daily Digest (D)" aria-label="daily digest">
+      <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 4.5h11v11h-11z"/><path d="M7 7.5h6M7 10h6M7 12.5h4"/></svg>
+    </button>
+    <button class="icon-btn" id="latest-btn" title="跳到最新 (L)" aria-label="latest">
+      <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M10 16V4M5 9l5-5 5 5"/></svg>
+    </button>
+  </div>
+</header>
+
+
+<section class="sync-alert" id="sync-alert" hidden aria-live="polite">
+  <div class="sync-alert-copy">
+    <div class="sync-alert-title" id="sync-alert-title">同步状态正常</div>
+    <div class="sync-alert-text" id="sync-alert-text">如果飞书网络或授权有问题，这里会直接提醒。</div>
+  </div>
+  <div class="sync-alert-actions">
+    <a class="mini-btn" id="sync-auth-open" href="#" target="_blank" rel="noopener" hidden>去授权</a>
+    <button class="mini-btn" id="sync-reauth-btn" type="button" hidden>重新授权</button>
+    <button class="mini-btn" id="sync-catchup-btn" type="button" hidden>继续补跑</button>
+    <button class="mini-btn" id="sync-alert-refresh-btn" type="button" hidden>刷新状态</button>
+  </div>
+</section>
+
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-toolbar">
+      <button class="ghost-chip clear-chip" id="clear-all-filters" type="button">Clear all</button>
+    </div>
+
+    <section class="side-section" data-open="true">
+      <button class="side-header"><span>EDITIONS</span><span class="caret"></span></button>
+      <div class="side-body">
+        <div id="date-list" class="date-list"></div>
+      </div>
+    </section>
+
+    <section class="side-section" data-open="true">
+      <button class="side-header"><span>CATEGORIES</span><span class="caret"></span></button>
+      <div class="side-body">
+        <div id="category-filters" class="chip-col"></div>
+      </div>
+    </section>
+
+    <section class="side-section" data-open="true">
+      <button class="side-header"><span>SOURCES</span><span class="caret"></span></button>
+      <div class="side-body">
+        <div class="filter-group-head">
+          <span>来源</span>
+          <button class="filter-clear-btn" id="clear-sources" type="button">Clear</button>
+        </div>
+        <div id="source-filters" class="chip-row"></div>
+      </div>
+    </section>
+
+    <section class="side-section" data-open="true">
+      <button class="side-header"><span>WORTH READING</span><span class="caret"></span></button>
+      <div class="side-body">
+        <div class="filter-group-head">
+          <span>Worth reading</span>
+          <button class="filter-clear-btn" id="clear-score-filters" type="button">Clear</button>
+        </div>
+        <div class="filter-block compact-setting">
+          <div id="score-filters" class="chip-row"></div>
+        </div>
+        <div class="filter-block compact-setting">
+          <div class="filter-group-head">
+            <label>Signal</label>
+            <button class="filter-clear-btn" id="clear-signal-filters" type="button">Clear</button>
+          </div>
+          <div id="signal-filters" class="chip-row"></div>
+        </div>
+        <div class="filter-block compact-setting">
+          <div class="filter-group-head">
+            <label>Decision</label>
+            <button class="filter-clear-btn" id="clear-decision-filters" type="button">Clear</button>
+          </div>
+          <div id="decision-filters" class="chip-row"></div>
+        </div>
+        <div class="filter-block compact-setting">
+          <div class="filter-group-head">
+            <label>Transfer</label>
+            <button class="filter-clear-btn" id="clear-transfer-filters" type="button">Clear</button>
+          </div>
+          <div id="transfer-filters" class="chip-row"></div>
+        </div>
+        <div class="filter-block compact-setting">
+          <div class="filter-group-head">
+            <label>Evidence</label>
+            <button class="filter-clear-btn" id="clear-evidence-filters" type="button">Clear</button>
+          </div>
+          <div id="evidence-filters" class="chip-row"></div>
+        </div>
+        <div class="filter-block compact-setting">
+          <div class="filter-group-head">
+            <label>Constraint</label>
+            <button class="filter-clear-btn" id="clear-constraint-filters" type="button">Clear</button>
+          </div>
+          <div id="constraint-filters" class="chip-row"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="side-section" data-open="true">
+      <button class="side-header"><span>ENTITY TAGS</span><span class="caret"></span></button>
+      <div class="side-body">
+        <div class="filter-group-head">
+          <span>实体 / 产品 / 公司</span>
+          <button class="filter-clear-btn" id="clear-entity-tags" type="button">Clear</button>
+        </div>
+        <div id="entity-tag-filters" class="chip-row"></div>
+      </div>
+    </section>
+
+    <section class="side-section" data-open="true">
+      <button class="side-header"><span>TOPIC TAGS</span><span class="caret"></span></button>
+      <div class="side-body">
+        <div class="filter-group-head">
+          <span>主题 / 动作 / 领域</span>
+          <button class="filter-clear-btn" id="clear-topic-tags" type="button">Clear</button>
+        </div>
+        <div id="topic-tag-filters" class="chip-row"></div>
+      </div>
+    </section>
+
+    <section class="side-section" data-open="true">
+      <button class="side-header"><span>MY LISTS</span><span class="caret"></span></button>
+      <div class="side-body">
+        <div class="filter-group-head">
+          <span>状态</span>
+          <button class="filter-clear-btn" id="clear-item-state-filters" type="button">Clear</button>
+        </div>
+        <div id="item-state-filters" class="chip-row"></div>
+      </div>
+    </section>
+
+
+
+    <section class="side-section meta">
+      <div class="credits">
+        <div class="credits-line">BUILT FROM <span class="credits-mark">/data/ai-feed/</span></div>
+        <div class="credits-line" id="generated-at">—</div>
+        <div class="credits-kbd"><kbd class="kbd">J</kbd><kbd class="kbd">K</kbd> next / prev day · <kbd class="kbd">/</kbd> search · <kbd class="kbd">T</kbd> theme</div>
+      </div>
+    </section>
+  </aside>
+
+  <main class="timeline" id="timeline">
+    <div id="empty" class="empty" hidden>无匹配条目。</div>
+    <section id="digest-view" class="digest-view" hidden>
+      <div class="digest-shell">
+        <div class="digest-head">
+          <div>
+            <div class="panel-kicker">Daily Digest</div>
+            <h2 id="digest-title">昨日总结</h2>
+            <p id="digest-subtitle" class="digest-subtitle">正在读取摘要…</p>
+          </div>
+          <div class="digest-head-actions">
+            <div class="digest-date-switcher" aria-label="日报日期切换">
+              <div class="digest-date-switcher-top">
+                <button class="digest-date-step" id="digest-date-prev-btn" type="button">← 前一天</button>
+                <label class="field digest-date-picker">
+                  <span>Report Date</span>
+                  <select id="digest-date-select"></select>
+                </label>
+                <button class="digest-date-step" id="digest-date-next-btn" type="button">后一天 →</button>
+                <input class="digest-date-native" id="digest-date-input" type="date" aria-label="按日历选择日报日期" />
+              </div>
+              <div class="digest-date-rail" id="digest-date-rail" aria-label="最近日报日期"></div>
+            </div>
+            <button class="ghost-chip" id="digest-read-mode-btn" type="button" aria-pressed="false">轻阅读 Beta</button>
+            <button class="ghost-chip" id="digest-refresh-btn" type="button">刷新摘要</button>
+          </div>
+        </div>
+        <div id="digest-tabs" class="runtime-detail-tabs digest-tabs"></div>
+        <div id="digest-content" class="digest-content"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="modal-shell" id="settings-modal" hidden>
+  <div class="modal-backdrop" id="settings-backdrop"></div>
+  <section class="settings-modal-card" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    <div class="settings-modal-head">
+      <div>
+        <div class="modal-eyebrow">SETTINGS</div>
+        <h2 id="settings-title">阅读与评分配置</h2>
+        <p class="settings-modal-copy">侧栏只做筛选；阅读偏好、评分模型和补跑任务统一放在这里。</p>
+      </div>
+      <button class="icon-btn modal-close" id="settings-close-btn" type="button" aria-label="关闭设置">
+        <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5 5l10 10M15 5L5 15"/></svg>
+      </button>
+    </div>
+
+    <div class="settings-modal-body">
+      <nav class="settings-tabs" aria-label="设置分组">
+        <button class="settings-tab active" type="button" data-settings-tab="reading">阅读</button>
+        <button class="settings-tab" type="button" data-settings-tab="sources">信源</button>
+        <button class="settings-tab" type="button" data-settings-tab="scoring">评分</button>
+        <button class="settings-tab" type="button" data-settings-tab="tagging">标签</button>
+        <button class="settings-tab" type="button" data-settings-tab="digest">Digest</button>
+      </nav>
+
+      <section class="settings-panel" data-settings-tab-panel="reading">
+        <div class="panel-head">
+          <div>
+            <div class="panel-kicker">Reading</div>
+            <h3>界面偏好</h3>
+          </div>
+          <p>这些设置只影响当前浏览器的阅读体验。</p>
+        </div>
+        <div class="settings-grid two-col">
+          <label class="field">
+            <span>Theme</span>
+            <select id="setting-theme">
+              <option value="auto">跟随系统</option>
+              <option value="light">浅色</option>
+              <option value="dark">深色</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Density</span>
+            <select id="setting-density">
+              <option value="compact">紧凑</option>
+              <option value="cozy">标准</option>
+              <option value="roomy">宽松</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Group by</span>
+            <select id="setting-group">
+              <option value="category">按分类</option>
+              <option value="source">按来源</option>
+              <option value="flat">不分组</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Cluster</span>
+            <select id="setting-cluster">
+              <option value="auto">标准去重</option>
+              <option value="aggressive">更激进</option>
+              <option value="off">关闭聚合</option>
+            </select>
+          </label>
+          <label class="field field-wide">
+            <span>Summary</span>
+            <select id="setting-summary">
+              <option value="on">显示摘要</option>
+              <option value="off">只看标题</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section class="settings-panel" data-settings-tab-panel="sources">
+        <div class="panel-head">
+          <div>
+            <div class="panel-kicker">SOURCES</div>
+            <h3>信源管理</h3>
+          </div>
+          <p>这里可以直接管理 RSS 信源，也可以顺手新建一个分类。</p>
+        </div>
+
+        <div class="source-manager-grid">
+          <div class="settings-subpanel source-list-panel">
+            <div class="settings-subpanel-head source-subpanel-head">
+              <div>
+                <div class="panel-kicker">LIBRARY</div>
+                <h4>已有信源</h4>
+              </div>
+              <p>先筛选，再批量处理；失败源可以直接重试。</p>
+            </div>
+            <div class="source-filter-grid compact-grid">
+              <label class="field">
+                <span>搜索</span>
+                <input id="source-filter-search" type="search" placeholder="搜名称、地址、分类" />
+              </label>
+              <label class="field">
+                <span>分类筛选</span>
+                <select id="source-filter-category">
+                  <option value="">全部分类</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>状态筛选</span>
+                <select id="source-filter-status">
+                  <option value="all">全部</option>
+                  <option value="enabled">仅启用中</option>
+                  <option value="paused">仅已暂停</option>
+                  <option value="failed">仅抓取失败</option>
+                </select>
+              </label>
+            </div>
+            <div class="source-selection-bar">
+              <div class="source-selection-meta">
+                <strong id="source-visible-summary">0 / 0</strong>
+                <span id="source-selection-summary">已选 0 项</span>
+              </div>
+              <div class="runtime-inline-actions source-selection-actions">
+                <button class="mini-btn" type="button" id="source-select-visible">全选当前结果</button>
+                <button class="mini-btn" type="button" id="source-clear-selection">清空勾选</button>
+              </div>
+            </div>
+            <div class="source-bulk-edit-panel source-action-board">
+              <div class="settings-grid two-col compact-grid">
+                <label class="field">
+                  <span>批量改分类</span>
+                  <input id="source-bulk-category" type="text" list="source-category-options" placeholder="RSS源" />
+                </label>
+                <label class="field">
+                  <span>新分类 Emoji</span>
+                  <input id="source-bulk-category-emoji" type="text" placeholder="🧩" />
+                </label>
+              </div>
+              <div class="backfill-status-row">
+                <div id="source-bulk-edit-status" class="setting-subline"></div>
+                <div class="runtime-inline-actions">
+                  <button type="button" id="source-bulk-apply-category">批量改分类</button>
+                  <button type="button" id="source-bulk-enable">批量启用</button>
+                  <button type="button" id="source-bulk-disable">批量暂停</button>
+                  <button type="button" id="source-bulk-retry-selected">重试所选</button>
+                  <button type="button" id="source-bulk-retry-failed">重试失败源</button>
+                </div>
+              </div>
+            </div>
+            <div id="source-config-list" class="profile-list"></div>
+          </div>
+
+          <div class="source-side-stack">
+            <div class="settings-subpanel source-editor-panel">
+              <div class="settings-subpanel-head source-subpanel-head">
+                <div>
+                  <div class="panel-kicker">EDITOR</div>
+                  <h4>新增 / 编辑 RSS</h4>
+                </div>
+                <p>分类可直接输入新名字；新分类再补一个 emoji。</p>
+              </div>
+            <form id="source-form" class="profile-form">
+              <input type="hidden" id="source-id" />
+              <div class="settings-grid two-col compact-grid">
+                <label class="field">
+                  <span>名称</span>
+                  <input id="source-name" type="text" placeholder="OpenAI Blog" />
+                </label>
+                <label class="field">
+                  <span>显示名</span>
+                  <input id="source-label" type="text" placeholder="OpenAI" />
+                </label>
+                <label class="field field-wide">
+                  <span>RSS 地址</span>
+                  <input id="source-feed-url" type="text" placeholder="https://example.com/rss.xml" />
+                </label>
+                <label class="field">
+                  <span>分类</span>
+                  <input id="source-category" type="text" list="source-category-options" placeholder="🧠 模型 & 论文" />
+                  <datalist id="source-category-options"></datalist>
+                </label>
+                <label class="field">
+                  <span>新分类 Emoji</span>
+                  <input id="source-category-emoji" type="text" placeholder="🛰" />
+                </label>
+                <div class="field checkbox-field">
+                  <span>状态</span>
+                  <label class="checkbox-pill">
+                    <input id="source-enabled" type="checkbox" checked />
+                    <span>启用这个信源</span>
+                  </label>
+                </div>
+              </div>
+              <div class="backfill-status-row">
+                <div id="source-config-status" class="setting-subline"></div>
+                <div class="runtime-inline-actions">
+                  <button type="button" id="source-reset">新建</button>
+                  <button type="submit" id="source-save">保存信源</button>
+                </div>
+              </div>
+            </form>
+            </div>
+
+            <div class="settings-subpanel source-bulk-panel">
+              <div class="settings-subpanel-head source-subpanel-head">
+                <div>
+                  <div class="panel-kicker">IMPORT</div>
+                  <h4>批量导入</h4>
+                </div>
+                <p>一行一个 RSS 地址；或 CSV：名称, RSS 地址, 分类, emoji, 显示名。</p>
+              </div>
+              <form id="source-bulk-form" class="profile-form">
+            <label class="field">
+              <span>批量文本</span>
+              <textarea id="source-bulk-import" rows="6" placeholder="https://openai.com/news/rss.xml&#10;OpenAI Blog, https://openai.com/news/rss.xml, RSS源, 🧩, RSS源"></textarea>
+            </label>
+            <div class="settings-grid two-col compact-grid">
+              <label class="field">
+                <span>默认分类</span>
+                <input id="source-bulk-default-category" type="text" list="source-category-options" placeholder="RSS源" />
+              </label>
+              <label class="field">
+                <span>默认 Emoji</span>
+                <input id="source-bulk-default-emoji" type="text" placeholder="🧩" />
+              </label>
+              <div class="field checkbox-field field-wide">
+                <span>导入后动作</span>
+                <label class="checkbox-pill">
+                  <input id="source-bulk-sync" type="checkbox" checked />
+                  <span>导入后立即抓一轮最新 RSS</span>
+                </label>
+              </div>
+            </div>
+            <div class="backfill-status-row">
+              <div id="source-bulk-status" class="setting-subline"></div>
+              <div class="runtime-inline-actions">
+                <button type="submit" id="source-bulk-save">批量导入</button>
+              </div>
+              </div>
+            </form>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-panel" data-settings-tab-panel="scoring">
+        <div class="panel-head">
+          <div>
+            <div class="panel-kicker">SCORING</div>
+            <h3>PM 评分模型</h3>
+          </div>
+          <p>配置会写入本地 <code>config.local.json</code>，新闻先展示，评分异步补齐。</p>
+        </div>
+
+        <div class="settings-inline-grid">
+          <div class="inline-card">
+            <div class="inline-card-head">
+              <strong>评分开关</strong>
+              <span>控制是否自动触发评分</span>
+            </div>
+            <div class="seg" data-setting="scoring-enabled">
+              <button type="button" data-value="true">开启</button>
+              <button type="button" data-value="false">关闭</button>
+            </div>
+          </div>
+          <div class="inline-card">
+            <div class="inline-card-head">
+              <strong>RSS</strong>
+              <span><a href="/rss.xml" target="_blank" rel="noopener">打开本地 RSS</a></span>
+            </div>
+            <div class="inline-card-grid">
+              <div>
+                <div class="mini-label">Feed URL</div>
+                <code class="rss-code">/rss.xml</code>
+              </div>
+              <label class="field field-inline">
+                <span>Max items</span>
+                <select id="rss-max-items">
+                  <option value="20">20</option>
+                  <option value="50">50</option>
+                  <option value="80">80</option>
+                  <option value="100">100</option>
+                </select>
+              </label>
+              <label class="field field-inline">
+                <span>评分并发</span>
+                <select id="scoring-parallel-workers">
+                  <option value="1">1 路（最稳）</option>
+                  <option value="2">2 路</option>
+                  <option value="3">3 路（推荐）</option>
+                  <option value="4">4 路</option>
+                  <option value="5">5 路（更激进）</option>
+                </select>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-grid scoring-grid">
+          <div class="settings-subpanel">
+            <div class="settings-subpanel-head">
+              <h4>已有配置</h4>
+              <p>切换当前使用的评分模型，或继续编辑。</p>
+            </div>
+            <div id="profile-list" class="profile-list"></div>
+          </div>
+
+          <div class="settings-subpanel">
+            <div class="settings-subpanel-head">
+              <h4>编辑配置</h4>
+              <p>建议先用单条和小批量测试，再放大批量。</p>
+            </div>
+            <form id="profile-form" class="profile-form">
+              <input type="hidden" id="profile-id" />
+              <div class="settings-grid two-col compact-grid">
+                <label class="field">
+                  <span>Name</span>
+                  <input id="profile-name" type="text" placeholder="MiniMax M2.7" />
+                </label>
+                <label class="field">
+                  <span>Provider</span>
+                  <select id="profile-provider">
+                    <option value="openai_compatible">OpenAI Compatible</option>
+                    <option value="custom">Custom</option>
+                  </select>
+                </label>
+                <label class="field field-wide">
+                  <span>Base URL</span>
+                  <input id="profile-base-url" type="text" placeholder="https://api.minimaxi.com/v1" />
+                </label>
+                <label class="field field-wide">
+                  <span>API Key</span>
+                  <input id="profile-api-key" type="password" placeholder="sk-..." />
+                </label>
+                <label class="field">
+                  <span>Model</span>
+                  <input id="profile-model" type="text" placeholder="MiniMax-M2.7" />
+                </label>
+                <label class="field">
+                  <span>Batch Size</span>
+                  <select id="profile-batch-size">
+                    <option value="1">1 条</option>
+                    <option value="5">5 条</option>
+                    <option value="10">10 条</option>
+                  </select>
+                </label>
+              </div>
+              <div class="profile-actions">
+                <button type="submit" id="profile-save">保存并设为当前</button>
+                <button type="button" id="profile-reset">新建配置</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-panel" data-settings-tab-panel="tagging">
+        <div class="panel-head">
+          <div>
+            <div class="panel-kicker">TAGGING</div>
+            <h3>标签模型</h3>
+          </div>
+          <p>标签与评分独立异步运行，默认优先打 representative，再继承给同 cluster 条目。</p>
+        </div>
+        <div class="settings-inline-grid">
+          <div class="inline-card">
+            <div class="inline-card-head">
+              <strong>标签开关</strong>
+              <span>控制是否自动补标签</span>
+            </div>
+            <div class="seg" data-setting="tagging-enabled">
+              <button type="button" data-value="true">开启</button>
+              <button type="button" data-value="false">关闭</button>
+            </div>
+          </div>
+          <div class="inline-card">
+            <div class="inline-card-head">
+              <strong>补齐策略</strong>
+              <span>控制单次最多发起多少条模型请求</span>
+            </div>
+            <div class="settings-grid two-col compact-grid">
+              <label class="field">
+                <span>Max pending / run</span>
+                <select id="tagging-max-pending">
+                  <option value="0">全部</option>
+                  <option value="10">10</option>
+                  <option value="20">20</option>
+                  <option value="50">50</option>
+                  <option value="100">100</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>并发路数</span>
+                <select id="tagging-parallel-workers">
+                  <option value="1">1 路（最稳）</option>
+                  <option value="2">2 路</option>
+                  <option value="3">3 路（推荐）</option>
+                  <option value="4">4 路</option>
+                  <option value="5">5 路（更激进）</option>
+                </select>
+              </label>
+              <div class="field checkbox-field">
+                <span>Cluster inherit</span>
+                <label class="checkbox-pill">
+                  <input id="tagging-allow-inherit" type="checkbox" />
+                  <span>允许 cluster 成员继承 representative 标签</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="settings-grid scoring-grid">
+          <div class="settings-subpanel">
+            <div class="settings-subpanel-head">
+              <h4>已有标签模型</h4>
+              <p>支持独立于评分配置的模型档案。</p>
+            </div>
+            <div id="tagging-profile-list" class="profile-list"></div>
+          </div>
+          <div class="settings-subpanel">
+            <div class="settings-subpanel-head">
+              <h4>编辑标签模型</h4>
+              <p>建议先小批量试跑，确认标签是否足够稳定。</p>
+            </div>
+            <form id="tagging-profile-form" class="profile-form">
+              <input type="hidden" id="tagging-profile-id" />
+              <div class="settings-grid two-col compact-grid">
+                <label class="field">
+                  <span>Name</span>
+                  <input id="tagging-profile-name" type="text" placeholder="Tagger" />
+                </label>
+                <label class="field">
+                  <span>Provider</span>
+                  <select id="tagging-profile-provider">
+                    <option value="openai_compatible">OpenAI Compatible</option>
+                    <option value="custom">Custom</option>
+                  </select>
+                </label>
+                <label class="field field-wide">
+                  <span>Base URL</span>
+                  <input id="tagging-profile-base-url" type="text" placeholder="https://api.example.com/v1" />
+                </label>
+                <label class="field field-wide">
+                  <span>API Key</span>
+                  <input id="tagging-profile-api-key" type="password" placeholder="sk-..." />
+                </label>
+                <label class="field">
+                  <span>Model</span>
+                  <input id="tagging-profile-model" type="text" placeholder="MiniMax-M2.7" />
+                </label>
+                <label class="field">
+                  <span>Batch Size</span>
+                  <select id="tagging-profile-batch-size">
+                    <option value="1">1 条</option>
+                    <option value="5">5 条</option>
+                    <option value="10">10 条</option>
+                  </select>
+                </label>
+              </div>
+              <div class="profile-actions">
+                <button type="submit" id="tagging-profile-save">保存并设为当前</button>
+                <button type="button" id="tagging-profile-reset">新建配置</button>
+              </div>
+            </form>
+          </div>
+        </div>
+        <div class="backfill-workspace">
+          <form id="tagging-backfill-form" class="backfill-form">
+            <div class="settings-grid two-col compact-grid">
+              <label class="field">
+                <span>Mode</span>
+                <select id="tagging-backfill-mode">
+                  <option value="single">单天</option>
+                  <option value="range">日期范围</option>
+                </select>
+              </label>
+              <div class="field checkbox-field">
+                <span>重跑策略</span>
+                <label class="checkbox-pill">
+                  <input id="tagging-backfill-force-check" type="checkbox" />
+                  <span>强制重打已有标签</span>
+                </label>
+              </div>
+            </div>
+            <div class="preset-row" id="tagging-backfill-presets">
+              <button type="button" class="ghost-chip" data-backfill-target="tagging-backfill" data-backfill-preset="today">今天</button>
+              <button type="button" class="ghost-chip" data-backfill-target="tagging-backfill" data-backfill-preset="yesterday">昨天</button>
+              <button type="button" class="ghost-chip" data-backfill-target="tagging-backfill" data-backfill-preset="last7">最近 7 天</button>
+              <button type="button" class="ghost-chip" data-backfill-target="tagging-backfill" data-backfill-preset="month">本月</button>
+            </div>
+            <div id="tagging-backfill-single-group" class="settings-grid one-col compact-grid">
+              <label class="field">
+                <span>Date</span>
+                <input id="tagging-backfill-single-date" type="date" />
+              </label>
+            </div>
+            <div id="tagging-backfill-range-group" class="settings-grid two-col compact-grid" hidden>
+              <label class="field">
+                <span>Start</span>
+                <input id="tagging-backfill-start-date" type="date" />
+              </label>
+              <label class="field">
+                <span>End</span>
+                <input id="tagging-backfill-end-date" type="date" />
+              </label>
+            </div>
+            <div class="backfill-status-row">
+              <div id="tagging-backfill-status" class="setting-subline"></div>
+              <div class="runtime-inline-actions">
+                <button type="button" id="tagging-backfill-prioritize">插队到最前</button>
+                <button type="submit" id="tagging-backfill-run">提交标签补跑</button>
+              </div>
+            </div>
+          </form>
+          <div class="runtime-panel">
+            <div class="runtime-summary">
+              <div id="tagging-runtime-summary" class="runtime-summary-line">正在读取标签状态…</div>
+              <div id="tagging-runtime-current" class="runtime-current-line"></div>
+            </div>
+            <div id="tagging-runtime-controls" class="runtime-controls"></div>
+            <div id="tagging-runtime-breakdown" class="runtime-breakdown"></div>
+            <div id="tagging-runtime-tabs" class="runtime-detail-tabs"></div>
+            <div id="tagging-runtime-detail-grid" class="runtime-detail-grid"></div>
+            <div id="tagging-runtime-list" class="runtime-job-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-panel" data-settings-tab-panel="digest">
+        <div class="panel-head">
+          <div>
+            <div class="panel-kicker">DIGEST</div>
+            <h3>次日 8:30 日报总结</h3>
+          </div>
+          <p>每天汇总前一天热点实体 / 热点主题，并提炼必读与值得读的 PM 洞察。</p>
+        </div>
+        <div class="settings-inline-grid">
+          <div class="inline-card">
+            <div class="inline-card-head">
+              <strong>日报开关</strong>
+              <span>控制是否在 08:30 自动生成昨日总结</span>
+            </div>
+            <div class="seg" data-setting="digest-enabled">
+              <button type="button" data-value="true">开启</button>
+              <button type="button" data-value="false">关闭</button>
+            </div>
+          </div>
+          <div class="inline-card">
+            <div class="settings-grid two-col compact-grid">
+              <label class="field">
+                <span>Schedule</span>
+                <input id="digest-schedule-time" type="time" value="08:30" />
+              </label>
+              <label class="field">
+                <span>日报并发</span>
+                <select id="digest-parallel-workers">
+                  <option value="1">1 路（推荐）</option>
+                  <option value="2">2 路</option>
+                  <option value="3">3 路</option>
+                  <option value="4">4 路</option>
+                  <option value="5">5 路</option>
+                </select>
+              </label>
+              <div class="field checkbox-field">
+                <span>Outputs</span>
+                <label class="checkbox-pill">
+                  <input id="digest-output-obsidian" type="checkbox" />
+                  <span>同时写入 Obsidian</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="settings-grid scoring-grid">
+          <div class="settings-subpanel">
+            <div class="settings-subpanel-head">
+              <h4>已有 Digest 模型</h4>
+              <p>Digest 与评分、标签模型完全分离。</p>
+            </div>
+            <div id="digest-profile-list" class="profile-list"></div>
+          </div>
+          <div class="settings-subpanel">
+            <div class="settings-subpanel-head">
+              <h4>编辑 Digest 模型</h4>
+              <p>如果暂时不配模型，也会先产出热点 + 降级版洞察。</p>
+            </div>
+            <form id="digest-profile-form" class="profile-form">
+              <input type="hidden" id="digest-profile-id" />
+              <div class="settings-grid two-col compact-grid">
+                <label class="field">
+                  <span>Name</span>
+                  <input id="digest-profile-name" type="text" placeholder="Digest analyzer" />
+                </label>
+                <label class="field">
+                  <span>Provider</span>
+                  <select id="digest-profile-provider">
+                    <option value="openai_compatible">OpenAI Compatible</option>
+                    <option value="custom">Custom</option>
+                  </select>
+                </label>
+                <label class="field field-wide">
+                  <span>Base URL</span>
+                  <input id="digest-profile-base-url" type="text" placeholder="https://api.example.com/v1" />
+                </label>
+                <label class="field field-wide">
+                  <span>API Key</span>
+                  <input id="digest-profile-api-key" type="password" placeholder="sk-..." />
+                </label>
+                <label class="field">
+                  <span>Model</span>
+                  <input id="digest-profile-model" type="text" placeholder="gpt-5-mini" />
+                </label>
+                <label class="field">
+                  <span>Batch Size</span>
+                  <select id="digest-profile-batch-size">
+                    <option value="1">1 次</option>
+                    <option value="5">5</option>
+                    <option value="10">10</option>
+                  </select>
+                </label>
+              </div>
+              <div class="profile-actions">
+                <button type="submit" id="digest-profile-save">保存并设为当前</button>
+                <button type="button" id="digest-profile-reset">新建配置</button>
+              </div>
+            </form>
+          </div>
+        </div>
+        <div class="backfill-workspace">
+          <form id="digest-run-form" class="backfill-form">
+            <div class="settings-grid two-col compact-grid">
+              <label class="field">
+                <span>Mode</span>
+                <select id="digest-backfill-mode">
+                  <option value="single">单天</option>
+                  <option value="range">日期范围</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>重跑策略</span>
+                <label class="checkbox-pill">
+                  <input id="digest-run-force-check" type="checkbox" />
+                  <span>强制重新生成摘要</span>
+                </label>
+              </label>
+            </div>
+            <div class="preset-row" id="digest-backfill-presets">
+              <button type="button" class="ghost-chip" data-backfill-target="digest-backfill" data-backfill-preset="today">今天</button>
+              <button type="button" class="ghost-chip" data-backfill-target="digest-backfill" data-backfill-preset="yesterday">昨天</button>
+              <button type="button" class="ghost-chip" data-backfill-target="digest-backfill" data-backfill-preset="last7">最近 7 天</button>
+              <button type="button" class="ghost-chip" data-backfill-target="digest-backfill" data-backfill-preset="month">本月</button>
+            </div>
+            <div id="digest-backfill-single-group" class="settings-grid one-col compact-grid">
+              <label class="field">
+                <span>Date</span>
+                <input id="digest-run-date" type="date" />
+              </label>
+            </div>
+            <div id="digest-backfill-range-group" class="settings-grid two-col compact-grid" hidden>
+              <label class="field">
+                <span>Start</span>
+                <input id="digest-backfill-start-date" type="date" />
+              </label>
+              <label class="field">
+                <span>End</span>
+                <input id="digest-backfill-end-date" type="date" />
+              </label>
+            </div>
+            <div class="field checkbox-field">
+                <span>说明</span>
+                <div class="setting-subline">支持单天或日期区间，和评分/标签补跑保持一致。</div>
+            </div>
+            <div class="backfill-status-row">
+              <div id="digest-run-status" class="setting-subline"></div>
+              <div class="runtime-inline-actions">
+                <button type="button" id="digest-run-prioritize">插队到最前</button>
+                <button type="submit" id="digest-run-btn">提交日报补跑</button>
+              </div>
+            </div>
+          </form>
+          <div class="runtime-panel">
+            <div class="runtime-summary">
+              <div id="digest-runtime-summary" class="runtime-summary-line">正在读取日报状态…</div>
+              <div id="digest-runtime-current" class="runtime-current-line"></div>
+            </div>
+            <div id="digest-runtime-controls" class="runtime-controls"></div>
+            <div id="digest-runtime-list" class="runtime-job-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-panel" data-settings-tab-panel="scoring">
+        <div class="panel-head">
+          <div>
+            <div class="panel-kicker">Backfill</div>
+            <h3>补跑评分</h3>
+          </div>
+          <p>支持单天或日期区间；如果最近一小时已经算过，可以选择跳过已存在结果。</p>
+        </div>
+
+        <div class="backfill-workspace">
+          <form id="backfill-form" class="backfill-form">
+            <div class="settings-grid two-col compact-grid">
+              <label class="field">
+                <span>Mode</span>
+                <select id="backfill-mode">
+                  <option value="single">单天</option>
+                  <option value="range">日期范围</option>
+                </select>
+              </label>
+              <div class="field checkbox-field">
+                <span>重跑策略</span>
+                <label class="checkbox-pill">
+                  <input id="backfill-force-check" type="checkbox" />
+                  <span>强制重算已评分条目</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="preset-row" id="backfill-presets">
+              <button type="button" class="ghost-chip" data-backfill-preset="today">今天</button>
+              <button type="button" class="ghost-chip" data-backfill-preset="yesterday">昨天</button>
+              <button type="button" class="ghost-chip" data-backfill-preset="last7">最近 7 天</button>
+              <button type="button" class="ghost-chip" data-backfill-preset="month">本月</button>
+            </div>
+
+            <div id="backfill-single-group" class="settings-grid one-col compact-grid">
+              <label class="field">
+                <span>Date</span>
+                <input id="backfill-single-date" type="date" />
+              </label>
+            </div>
+
+            <div id="backfill-range-group" class="settings-grid two-col compact-grid" hidden>
+              <label class="field">
+                <span>Start</span>
+                <input id="backfill-start-date" type="date" />
+              </label>
+              <label class="field">
+                <span>End</span>
+                <input id="backfill-end-date" type="date" />
+              </label>
+            </div>
+
+            <div class="backfill-status-row">
+              <div id="backfill-status" class="setting-subline"></div>
+              <div class="runtime-inline-actions">
+                <button type="button" id="backfill-prioritize">插队到最前</button>
+                <button type="submit" id="backfill-run">提交补跑</button>
+              </div>
+            </div>
+          </form>
+
+          <div class="runtime-panel">
+            <div class="runtime-summary">
+              <div id="scoring-runtime-summary" class="runtime-summary-line">正在读取评分状态…</div>
+              <div id="scoring-runtime-current" class="runtime-current-line"></div>
+            </div>
+            <div id="scoring-runtime-controls" class="runtime-controls"></div>
+            <div id="runtime-breakdown" class="runtime-breakdown"></div>
+            <div id="runtime-detail-tabs" class="runtime-detail-tabs"></div>
+            <div id="runtime-detail-grid" class="runtime-detail-grid"></div>
+            <div id="scoring-runtime-list" class="runtime-job-list"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </section>
+</div>
+
+<script src="app.js?v=20260511-gorden-digest4"></script>
+</body>
+</html>

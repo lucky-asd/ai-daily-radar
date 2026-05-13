@@ -1,0 +1,14 @@
+# Generated public data; GitHub Actions builds and deploys it.
+web/data/
+data/
+logs/
+config.local.json
+
+# OS / editor / Python
+.DS_Store
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+.idea/
+.vscode/

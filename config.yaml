@@ -1,0 +1,129 @@
+version: 1
+
+sources:
+  - id: rss-openai-news
+    name: OpenAI News
+    type: rss
+    enabled: true
+    config:
+      feed_url: https://openai.com/news/rss.xml
+      category: 🛠️ 产品 & 开源
+      source_label: OpenAI
+    derived: [web]
+
+  - id: rss-huggingface-blog
+    name: Hugging Face Blog
+    type: rss
+    enabled: true
+    config:
+      feed_url: https://huggingface.co/blog/feed.xml
+      category: 🧠 模型 & 论文
+      source_label: Hugging Face
+    derived: [web]
+
+  - id: rss-google-deepmind
+    name: Google DeepMind Blog
+    type: rss
+    enabled: true
+    config:
+      feed_url: https://deepmind.google/blog/rss.xml
+      category: 🧠 模型 & 论文
+      source_label: DeepMind
+    derived: [web]
+
+  - id: rss-github-ai
+    name: GitHub AI & ML
+    type: rss
+    enabled: true
+    config:
+      feed_url: https://github.blog/ai-and-ml/feed/
+      category: 💻 编程 & 架构
+      source_label: GitHub
+    derived: [web]
+
+  - id: rss-github-changelog
+    name: GitHub Changelog
+    type: rss
+    enabled: true
+    config:
+      feed_url: https://github.blog/changelog/feed/
+      category: 💻 编程 & 架构
+      source_label: GitHub
+    derived: [web]
+
+  - id: aihot-selected
+    name: 卡兹克精选
+    type: aihot_api
+    enabled: true
+    config:
+      base_url: https://aihot.virxact.com
+      mode: selected
+      take: 60
+      category: 卡兹克精选
+      source_label: 卡兹克
+    derived: [web]
+
+  - id: aihot-daily
+    name: 卡兹克日报
+    type: aihot_api
+    enabled: true
+    config:
+      base_url: https://aihot.virxact.com
+      mode: daily
+      daily_take: 14
+      category: 卡兹克日报
+      source_label: 卡兹克
+    derived: [web]
+
+categories:
+  - emoji: "🧠"
+    label: "🧠 模型 & 论文"
+    order: 1
+  - emoji: "🛠"
+    label: "🛠️ 产品 & 开源"
+    order: 2
+  - emoji: "💻"
+    label: "💻 编程 & 架构"
+    order: 3
+  - emoji: "🦂"
+    label: "卡兹克精选"
+    order: 4
+  - emoji: "🦂"
+    label: "卡兹克日报"
+    order: 5
+  - emoji: "📦"
+    label: "📦 其他"
+    order: 99
+
+outputs:
+  web:
+    out_dir: web/data
+
+scoring:
+  enabled: false
+  active_profile: null
+  parallel_workers: 1
+  rss:
+    enabled: false
+    max_items: 80
+  profiles: []
+
+tagging:
+  enabled: false
+  active_profile: null
+  batch_size: 5
+  parallel_workers: 1
+  max_pending_per_run: 50
+  allow_inherit_from_cluster: true
+  profiles: []
+
+daily_digest:
+  enabled: false
+  active_profile: null
+  parallel_workers: 1
+  schedule:
+    time: "08:30"
+  outputs:
+    web: true
+    obsidian: false
+  profiles: []
