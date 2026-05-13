@@ -4,6 +4,12 @@ data/
 logs/
 config.local.json
 
+# Private mode: only the encrypted bundle may be committed.
+web/private/*.json
+web/private/*.tmp
+web/private/*.bak
+!web/private/private.enc
+
 # OS / editor / Python
 .DS_Store
 __pycache__/

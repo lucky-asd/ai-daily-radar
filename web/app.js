@@ -136,6 +136,7 @@ const state = {
   settings: loadSettings(),
   sections: loadSections(),   // { EDITIONS: true, ... }
   workbenchExpanded: loadWorkbenchExpanded(),
+  privateBundle: null,
 };
 
 // Some upstream items come in malformed with markdown in the title,
@@ -180,6 +181,40 @@ function h(tag, attrs = {}, children = []) {
     el.appendChild(typeof c === "string" || typeof c === "number" ? document.createTextNode(String(c)) : c);
   }
   return el;
+}
+
+function decodeBase64Bytes(value) {
+  const raw = atob(String(value || ""));
+  const bytes = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i += 1) bytes[i] = raw.charCodeAt(i);
+  return bytes;
+}
+
+async function decryptPrivateBundle(encrypted, password) {
+  if (!encrypted || encrypted.version !== 1 || encrypted.algorithm !== "AES-GCM") {
+    throw new Error("私有数据包格式不支持");
+  }
+  if (!window.crypto?.subtle) throw new Error("当前浏览器不支持本地解密");
+  const kdf = encrypted.kdf || {};
+  const salt = decodeBase64Bytes(kdf.salt);
+  const iv = decodeBase64Bytes(encrypted.iv);
+  const ciphertext = decodeBase64Bytes(encrypted.ciphertext);
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(password),
+    "PBKDF2",
+    false,
+    ["deriveKey"],
+  );
+  const key = await crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt, iterations: Number(kdf.iterations || 210000), hash: kdf.hash || "SHA-256" },
+    keyMaterial,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["decrypt"],
+  );
+  const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
+  return JSON.parse(new TextDecoder().decode(plaintext));
 }
 
 function loadSettings() {
@@ -1336,6 +1371,55 @@ function applyStaticModeChrome() {
   if (copy) copy.textContent = "这是 GitHub Pages 静态站：只能调整本机阅读偏好，数据由 GitHub Actions 自动更新。";
 }
 
+async function applyPrivateBundle(bundle) {
+  if (!bundle?.index) throw new Error("私有数据包里没有 index 数据");
+  state.privateBundle = bundle;
+  state.index = bundle.index || { days: [] };
+  state.loadedDays.clear();
+  for (const [date, day] of Object.entries(bundle.days || {})) {
+    state.loadedDays.set(date, day || { date, cards: [], items: [] });
+  }
+  state.digestCache.clear();
+  for (const [date, digest] of Object.entries(bundle.digests || {})) {
+    state.digestCache.set(date, digest);
+  }
+  const digestDates = Object.keys(bundle.digests || {}).sort().reverse();
+  state.digestIndex = bundle.digest_index || bundle.digestIndex || { dates: digestDates };
+  state.sourceConfig = { sources: state.index.sources || [], categories: state.index.categories || [] };
+  document.documentElement.setAttribute("data-private-unlocked", "true");
+  clearAllFilters();
+  state.timelineCount = TIMELINE_DAY_BATCH_COUNT;
+  state.selectedDigestDate = getAvailableDigestDates()[0] || null;
+  ensureDefaultFeedDate();
+  renderSidebar();
+  syncIndexMeta();
+  syncPrimaryViews();
+  await renderTimeline();
+  setRefreshStatus("success", "已解锁私有版：本地评分、标签和日报已加载");
+  window.setTimeout(() => setRefreshStatus(), 4500);
+}
+
+async function unlockPrivateBundle() {
+  const btn = $("#private-unlock-btn");
+  const password = window.prompt("请输入私有数据包密码。密码只在本浏览器里用于解密，不会发送到服务器。");
+  if (!password) return;
+  try {
+    btn?.setAttribute("data-state", "loading");
+    setRefreshStatus("loading", "正在本地解密私有数据…");
+    const res = await fetch(`data/private/private.enc?v=${Date.now()}`, { cache: "no-store" });
+    if (!res.ok) throw new Error(res.status === 404 ? "还没有上传私有加密包" : `读取私有包失败：${res.status}`);
+    const encrypted = await res.json();
+    const bundle = await decryptPrivateBundle(encrypted, password);
+    await applyPrivateBundle(bundle);
+    btn?.setAttribute("data-state", "success");
+    btn?.setAttribute("title", "私有数据已解锁");
+  } catch (err) {
+    btn?.setAttribute("data-state", "error");
+    setRefreshStatus("error", err?.message || "私有数据解锁失败");
+    window.setTimeout(() => setRefreshStatus(), 5000);
+  }
+}
+
 // ─────────────────────────── Theme ───────────────────────────
 function applyTheme() {
   const pref = state.settings.theme;
@@ -2275,6 +2359,7 @@ function wireTopbar() {
   $("#settings-btn").addEventListener("click", () => openSettingsModal());
   $("#settings-close-btn")?.addEventListener("click", closeSettingsModal);
   $("#settings-backdrop")?.addEventListener("click", closeSettingsModal);
+  $("#private-unlock-btn")?.addEventListener("click", unlockPrivateBundle);
   $("#latest-btn").addEventListener("click", () => { state.activeView = "feed"; syncPrimaryViews(); window.scrollTo({ top: 0, behavior: "smooth" }); });
   $("#digest-btn")?.addEventListener("click", () => toggleDigestView());
   $("#digest-refresh-btn")?.addEventListener("click", () => refreshDigestCurrentDate());
@@ -2981,6 +3066,14 @@ async function loadSourceStatus(force = false) {
 }
 
 async function loadDigestIndex() {
+  if (state.privateBundle) {
+    const dates = getAvailableDigestDates();
+    if (!state.selectedDigestDate || !dates.includes(state.selectedDigestDate)) {
+      state.selectedDigestDate = dates[0] || null;
+    }
+    renderDigestDateSelect();
+    return state.digestIndex;
+  }
   const res = await fetch(`data/digest/index.json?v=${state.cacheToken}`, { cache: "no-store" });
   if (!res.ok) {
     state.digestIndex = { dates: [] };

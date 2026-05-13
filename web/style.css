@@ -4466,15 +4466,15 @@ kbd.kbd {
 
 /* GitHub Pages / static preview mode: public data has no local scoring, tags,
    or private reading state. Keep the public surface focused on dates + sources. */
-[data-static-site] .title-score,
-[data-static-site] .level-row,
-[data-static-site] .tag-row,
-[data-static-site] .score-reason,
-[data-static-site] .item-actions,
-[data-static-site] .side-section[data-static-hide="true"] {
+[data-static-site]:not([data-private-unlocked="true"]) .title-score,
+[data-static-site]:not([data-private-unlocked="true"]) .level-row,
+[data-static-site]:not([data-private-unlocked="true"]) .tag-row,
+[data-static-site]:not([data-private-unlocked="true"]) .score-reason,
+[data-static-site]:not([data-private-unlocked="true"]) .item-actions,
+[data-static-site]:not([data-private-unlocked="true"]) .side-section[data-static-hide="true"] {
   display: none !important;
 }
 
-[data-static-site] .item-context-category {
+[data-static-site]:not([data-private-unlocked="true"]) .item-context-category {
   display: none;
 }

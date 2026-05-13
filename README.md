@@ -10,9 +10,9 @@
 - 公开线上源：卡兹克精选、卡兹克日报
 - 不包含飞书、私有 OPML、API Key、模型配置、私有日志或本地历史数据
 
-本地完整版里的评分、打标签、私有日报和私有源不在这个公开仓库里运行。
+本地完整版里的评分、打标签、私有日报和私有源不会在 GitHub Actions 里运行。
 
-## 本地预览
+## 本地预览公开版
 
 ```bash
 python3 scripts/rss_sync.py --max-age-days 45
@@ -39,4 +39,21 @@ http://localhost:48917/
 
 ## 私有增强版
 
-私有增强版建议另走加密包方案：本地处理飞书/私有源/评分/标签/Digest，然后生成加密的 `private.enc`。公开站输入密码后在浏览器本地解密展示。当前公开站不包含这部分。
+仓库已经内置“私有加密包”入口：页面右上角锁形按钮。它不会把密码发到服务器；密码只在浏览器里用来解密 `web/private/private.enc`。
+
+推荐流程是：
+
+1. 在你的本地完整版里继续抓私有源、评分、打标签、生成日报。
+2. 用完整版生成好的 `web/data` 打包加密：
+
+   ```bash
+   PRIVATE_BUNDLE_PASSWORD='换成你自己的强密码' \
+     node scripts/build-private-web-bundle.mjs \
+     --input web/data \
+     --output web/private/private.enc
+   ```
+
+3. 只把 `web/private/private.enc` 这个加密文件同步到 GitHub 仓库。
+4. 线上打开网页，点右上角锁形按钮，输入密码后显示私有评分、标签和日报。
+
+注意：不要把未加密的 `web/data`、API Key、`config.local.json` 推到 GitHub。
