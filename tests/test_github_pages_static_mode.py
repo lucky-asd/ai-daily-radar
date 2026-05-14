@@ -17,6 +17,11 @@ class GitHubPagesStaticModeTests(unittest.TestCase):
         self.assertIn("python3 scripts/build-web-data.py", text)
         self.assertIn("path: web", text)
 
+    def test_deploy_workflow_runs_after_push_to_main(self):
+        text = WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("push:", text)
+        self.assertIn("branches: [main]", text)
+
     def test_local_static_preview_port_is_static_mode(self):
         text = APP_JS.read_text(encoding="utf-8")
         self.assertIn('STATIC_PREVIEW_PORTS = new Set(["48917"])', text)

@@ -2,6 +2,8 @@ name: Deploy AI Daily Site
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
   schedule:
     # GitHub Actions uses UTC. This updates roughly every hour at :17.
     - cron: "17 * * * *"
