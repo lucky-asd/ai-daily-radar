@@ -238,6 +238,34 @@
   </main>
 </div>
 
+<div class="modal-shell private-modal-shell" id="private-unlock-modal" hidden>
+  <div class="modal-backdrop" id="private-unlock-backdrop"></div>
+  <section class="settings-modal-card private-unlock-card" role="dialog" aria-modal="true" aria-labelledby="private-unlock-title">
+    <div class="settings-modal-head">
+      <div>
+        <div class="modal-eyebrow">PRIVATE</div>
+        <h2 id="private-unlock-title">解锁私有版</h2>
+        <p class="settings-modal-copy">输入密码后，浏览器会在本机解密加密包；密码不会上传，也不会保存。</p>
+      </div>
+      <button class="icon-btn modal-close" id="private-unlock-close" type="button" aria-label="关闭私有数据解锁">
+        <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5 5l10 10M15 5L5 15"/></svg>
+      </button>
+    </div>
+    <form class="private-unlock-body" id="private-unlock-form">
+      <label class="field private-password-field">
+        <span>私有数据包密码</span>
+        <input id="private-password" type="password" autocomplete="current-password" placeholder="只在本浏览器里使用" />
+      </label>
+      <p class="private-unlock-hint">公开版仍然可直接浏览；解锁后会切换到你的私有评分、标签和日报数据。</p>
+      <div class="private-unlock-actions">
+        <button class="ghost-chip" id="private-unlock-cancel" type="button">取消</button>
+        <button class="mini-btn primary" id="private-unlock-submit" type="submit">解锁</button>
+      </div>
+      <div class="private-unlock-status" id="private-unlock-status" role="status" aria-live="polite"></div>
+    </form>
+  </section>
+</div>
+
 <div class="modal-shell" id="settings-modal" hidden>
   <div class="modal-backdrop" id="settings-backdrop"></div>
   <section class="settings-modal-card" role="dialog" aria-modal="true" aria-labelledby="settings-title">

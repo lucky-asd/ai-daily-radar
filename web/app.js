@@ -1399,24 +1399,84 @@ async function applyPrivateBundle(bundle) {
   window.setTimeout(() => setRefreshStatus(), 4500);
 }
 
-async function unlockPrivateBundle() {
+function isPrivateUnlockModalOpen() {
+  return !$("#private-unlock-modal")?.hasAttribute("hidden");
+}
+
+function setPrivateUnlockStatus(message = "", tone = "") {
+  const status = $("#private-unlock-status");
+  if (!status) return;
+  status.textContent = message;
+  status.dataset.tone = tone;
+}
+
+function openPrivateUnlockModal() {
+  if (state.privateBundle) {
+    setRefreshStatus("success", "私有数据已经解锁");
+    window.setTimeout(() => setRefreshStatus(), 2500);
+    return;
+  }
+  const modal = $("#private-unlock-modal");
+  if (!modal) return;
+  modal.removeAttribute("hidden");
+  document.body.classList.add("modal-open");
+  $("#private-unlock-btn")?.setAttribute("aria-expanded", "true");
+  setPrivateUnlockStatus("", "");
+  window.setTimeout(() => $("#private-password")?.focus(), 0);
+}
+
+function closePrivateUnlockModal() {
+  const modal = $("#private-unlock-modal");
+  if (!modal) return;
+  modal.setAttribute("hidden", "");
+  document.body.classList.remove("modal-open");
+  $("#private-unlock-btn")?.setAttribute("aria-expanded", "false");
+  setPrivateUnlockStatus("", "");
+  const password = $("#private-password");
+  if (password) password.value = "";
+  $("#private-unlock-btn")?.focus();
+}
+
+async function fetchPrivateBundleEnvelope() {
+  const urls = ["private/private.enc", "data/private/private.enc"];
+  let lastStatus = 0;
+  for (const url of urls) {
+    const res = await fetch(`${url}?v=${Date.now()}`, { cache: "no-store" });
+    if (res.ok) return res.json();
+    lastStatus = res.status;
+    if (res.status !== 404) throw new Error(`读取私有包失败：${res.status}`);
+  }
+  throw new Error(lastStatus === 404 ? "还没有上传私有加密包" : "读取私有包失败");
+}
+
+async function unlockPrivateBundle(password) {
   const btn = $("#private-unlock-btn");
-  const password = window.prompt("请输入私有数据包密码。密码只在本浏览器里用于解密，不会发送到服务器。");
-  if (!password) return;
+  if (!password) {
+    setPrivateUnlockStatus("请输入密码。", "error");
+    return;
+  }
   try {
     btn?.setAttribute("data-state", "loading");
+    $("#private-unlock-submit")?.setAttribute("disabled", "");
+    setPrivateUnlockStatus("正在本地解密私有数据…", "loading");
     setRefreshStatus("loading", "正在本地解密私有数据…");
-    const res = await fetch(`data/private/private.enc?v=${Date.now()}`, { cache: "no-store" });
-    if (!res.ok) throw new Error(res.status === 404 ? "还没有上传私有加密包" : `读取私有包失败：${res.status}`);
-    const encrypted = await res.json();
+    const encrypted = await fetchPrivateBundleEnvelope();
     const bundle = await decryptPrivateBundle(encrypted, password);
     await applyPrivateBundle(bundle);
     btn?.setAttribute("data-state", "success");
     btn?.setAttribute("title", "私有数据已解锁");
+    setPrivateUnlockStatus("已解锁。", "success");
+    closePrivateUnlockModal();
   } catch (err) {
     btn?.setAttribute("data-state", "error");
-    setRefreshStatus("error", err?.message || "私有数据解锁失败");
+    const message = err?.message || "私有数据解锁失败";
+    setPrivateUnlockStatus(message, "error");
+    setRefreshStatus("error", message);
     window.setTimeout(() => setRefreshStatus(), 5000);
+  } finally {
+    $("#private-unlock-submit")?.removeAttribute("disabled");
+    const passwordInput = $("#private-password");
+    if (passwordInput) passwordInput.value = "";
   }
 }
 
@@ -2359,7 +2419,14 @@ function wireTopbar() {
   $("#settings-btn").addEventListener("click", () => openSettingsModal());
   $("#settings-close-btn")?.addEventListener("click", closeSettingsModal);
   $("#settings-backdrop")?.addEventListener("click", closeSettingsModal);
-  $("#private-unlock-btn")?.addEventListener("click", unlockPrivateBundle);
+  $("#private-unlock-btn")?.addEventListener("click", openPrivateUnlockModal);
+  $("#private-unlock-close")?.addEventListener("click", closePrivateUnlockModal);
+  $("#private-unlock-cancel")?.addEventListener("click", closePrivateUnlockModal);
+  $("#private-unlock-backdrop")?.addEventListener("click", closePrivateUnlockModal);
+  $("#private-unlock-form")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    unlockPrivateBundle($("#private-password")?.value || "");
+  });
   $("#latest-btn").addEventListener("click", () => { state.activeView = "feed"; syncPrimaryViews(); window.scrollTo({ top: 0, behavior: "smooth" }); });
   $("#digest-btn")?.addEventListener("click", () => toggleDigestView());
   $("#digest-refresh-btn")?.addEventListener("click", () => refreshDigestCurrentDate());
@@ -2451,6 +2518,11 @@ function wireSourceAlert() {
 
 function wireKeys() {
   document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && isPrivateUnlockModalOpen()) {
+      closePrivateUnlockModal();
+      if (e.target.matches("input, textarea, select")) e.target.blur();
+      return;
+    }
     if (e.key === "Escape" && isSettingsModalOpen()) {
       closeSettingsModal();
       if (e.target.matches("input, textarea, select")) e.target.blur();

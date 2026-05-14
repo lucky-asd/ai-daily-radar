@@ -12,6 +12,7 @@ import sys
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from urllib import request as urllib_request
@@ -30,6 +31,7 @@ DEFAULT_CATEGORY = "📦 其他"
 DEFAULT_LOCAL_DELAY_MS = 180
 DEFAULT_REMOTE_DELAY_MS = 900
 PLACEHOLDER_DATE_STRINGS = {"2001-01-01"}
+RSS_DATE_TIMEZONE = ZoneInfo("Asia/Shanghai")
 
 
 def _local_name(tag):
@@ -207,6 +209,18 @@ def _is_placeholder_date(dt):
     return dt.astimezone(timezone.utc).strftime("%Y-%m-%d") in PLACEHOLDER_DATE_STRINGS
 
 
+def _rss_date_str(dt):
+    """Return the public daily bucket date for an RSS item.
+
+    GitHub Actions runs in UTC, but this site is read as a China-time daily.
+    Without this conversion, late-evening UTC RSS items look like yesterday on
+    the public site, which makes active sources appear stale.
+    """
+    if not dt:
+        return datetime.now(RSS_DATE_TIMEZONE).strftime("%Y-%m-%d")
+    return dt.astimezone(RSS_DATE_TIMEZONE).strftime("%Y-%m-%d")
+
+
 def _rebuild_web_day(repo_dir, date_str):
     subprocess.run([sys.executable, str(Path(repo_dir) / "scripts" / "build-web-data.py"), "--date", date_str], check=True)
 
@@ -253,7 +267,7 @@ def sync_rss_sources_report(
                     continue
                 if cutoff and item.get("published_at") and item["published_at"] < cutoff:
                     continue
-                date_str = item["published_at"].astimezone(timezone.utc).strftime("%Y-%m-%d")
+                date_str = _rss_date_str(item["published_at"])
                 by_date[date_str].append(item)
             for date_str, day_items in by_date.items():
                 changed = _save_source_day(repo_dir, source, date_str, day_items)

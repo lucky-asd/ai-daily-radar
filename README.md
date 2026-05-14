@@ -44,16 +44,29 @@ http://localhost:48917/
 推荐流程是：
 
 1. 在你的本地完整版里继续抓私有源、评分、打标签、生成日报。
-2. 用完整版生成好的 `web/data` 打包加密：
+2. 用完整版生成好的 `web/data` 打包加密，并只发布加密后的 `private.enc`：
 
    ```bash
    PRIVATE_BUNDLE_PASSWORD='换成你自己的强密码' \
-     node scripts/build-private-web-bundle.mjs \
+     node scripts/publish-private-bundle.mjs \
      --input web/data \
-     --output web/private/private.enc
+     --output web/private/private.enc \
+     --commit \
+     --push
    ```
 
-3. 只把 `web/private/private.enc` 这个加密文件同步到 GitHub 仓库。
+   如果你只是想先在本地生成文件、不提交不推送，就去掉 `--commit` 和 `--push`。
+
+3. 推送后，GitHub Pages 会把 `web/private/private.enc` 作为静态文件一起发布；未加密的 `web/data`、API Key、私有配置不会被上传。
 4. 线上打开网页，点右上角锁形按钮，输入密码后显示私有评分、标签和日报。
+
+你也可以先本地验一下密码和加密包是否正确：
+
+```bash
+PRIVATE_BUNDLE_PASSWORD='换成你自己的强密码' \
+  node scripts/decrypt-private-web-bundle.mjs \
+  --input web/private/private.enc \
+  --output /tmp/private-bundle-check.json
+```
 
 注意：不要把未加密的 `web/data`、API Key、`config.local.json` 推到 GitHub。
