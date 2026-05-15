@@ -40,9 +40,17 @@ class PrivateBundleTests(unittest.TestCase):
             payload = json.loads(out.read_text(encoding="utf-8"))
             self.assertEqual(1, payload["version"])
             self.assertEqual("AES-GCM", payload["algorithm"])
+            self.assertEqual("gzip", payload["compression"])
             self.assertEqual("PBKDF2", payload["kdf"]["name"])
             self.assertIn("ciphertext", payload)
             self.assertNotIn("Very Secret Item", out.read_text(encoding="utf-8"))
+            decrypted = root / "decrypted.json"
+            subprocess.run([
+                "node", str(ROOT / "scripts" / "decrypt-private-web-bundle.mjs"),
+                "--input", str(out),
+                "--output", str(decrypted),
+            ], check=True, env=env, cwd=ROOT)
+            self.assertIn("Very Secret Item", decrypted.read_text(encoding="utf-8"))
 
     def test_frontend_has_private_unlock_flow(self):
         app = APP_JS.read_text(encoding="utf-8")

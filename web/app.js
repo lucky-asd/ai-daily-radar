@@ -214,7 +214,18 @@ async function decryptPrivateBundle(encrypted, password) {
     ["decrypt"],
   );
   const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
-  return JSON.parse(new TextDecoder().decode(plaintext));
+  const text = await decodePrivatePlaintext(plaintext, encrypted.compression);
+  return JSON.parse(text);
+}
+
+async function decodePrivatePlaintext(buffer, compression) {
+  if (!compression) return new TextDecoder().decode(buffer);
+  if (compression !== "gzip") throw new Error(`私有数据包压缩格式不支持：${compression}`);
+  if (typeof DecompressionStream === "undefined") {
+    throw new Error("当前浏览器不支持解压私有数据包，请升级 Chrome 或 Edge");
+  }
+  const stream = new Blob([buffer]).stream().pipeThrough(new DecompressionStream("gzip"));
+  return new Response(stream).text();
 }
 
 function loadSettings() {

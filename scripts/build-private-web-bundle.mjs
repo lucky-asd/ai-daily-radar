@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { createCipheriv, pbkdf2Sync, randomBytes } from "node:crypto";
+import { gzipSync } from "node:zlib";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
@@ -47,12 +48,13 @@ function encryptJson(payload, password) {
   const iv = randomBytes(12);
   const key = pbkdf2Sync(password, salt, DEFAULT_ITERATIONS, 32, "sha256");
   const cipher = createCipheriv("aes-256-gcm", key, iv);
-  const plaintext = Buffer.from(JSON.stringify(payload), "utf8");
+  const plaintext = gzipSync(Buffer.from(JSON.stringify(payload), "utf8"), { level: 6 });
   const encrypted = Buffer.concat([cipher.update(plaintext), cipher.final()]);
   const tag = cipher.getAuthTag();
   return {
     version: 1,
     algorithm: "AES-GCM",
+    compression: "gzip",
     kdf: {
       name: "PBKDF2",
       hash: "SHA-256",

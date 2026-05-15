@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { createDecipheriv, pbkdf2Sync } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
+import { gunzipSync } from "node:zlib";
 
 function parseArgs(argv) {
   const args = {};
@@ -38,7 +39,8 @@ function decryptEnvelope(envelope, password) {
   const decipher = createDecipheriv("aes-256-gcm", key, b64(envelope.iv));
   decipher.setAuthTag(tag);
   const plaintext = Buffer.concat([decipher.update(encrypted), decipher.final()]);
-  return JSON.parse(plaintext.toString("utf8"));
+  const decoded = envelope.compression === "gzip" ? gunzipSync(plaintext) : plaintext;
+  return JSON.parse(decoded.toString("utf8"));
 }
 
 async function main() {
