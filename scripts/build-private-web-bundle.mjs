@@ -43,6 +43,38 @@ async function readJsonDir(dir) {
   return out;
 }
 
+function parsePositiveInt(value) {
+  const parsed = Number.parseInt(String(value || ""), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function selectRecentDates(index, days, maxDays) {
+  const byIndex = (index?.days || []).map((day) => day?.date).filter(Boolean);
+  const fallback = Object.keys(days || {}).sort().reverse();
+  const seen = new Set();
+  const ordered = [...byIndex, ...fallback].filter((date) => {
+    if (seen.has(date)) return false;
+    seen.add(date);
+    return true;
+  });
+  return maxDays > 0 ? ordered.slice(0, maxDays) : ordered;
+}
+
+function filterObjectByDates(input, dates) {
+  const allowed = new Set(dates);
+  return Object.fromEntries(Object.entries(input || {}).filter(([date]) => allowed.has(date)));
+}
+
+function filterIndexDays(index, dates) {
+  const allowed = new Set(dates);
+  return { ...(index || {}), days: (index?.days || []).filter((day) => allowed.has(day?.date)) };
+}
+
+function filterDigestIndex(index, dates) {
+  const allowed = new Set(dates);
+  return { ...(index || {}), dates: (index?.dates || []).filter((date) => allowed.has(date)) };
+}
+
 function encryptJson(payload, password) {
   const salt = randomBytes(16);
   const iv = randomBytes(12);
@@ -71,16 +103,23 @@ async function main() {
   const input = args.input || "web/data";
   const output = args.output || "web/private/private.enc";
   const password = process.env.PRIVATE_BUNDLE_PASSWORD || args.password;
+  const maxDays = parsePositiveInt(args["max-days"] || args.maxDays);
   if (!password) {
     throw new Error("请设置 PRIVATE_BUNDLE_PASSWORD，或传入 --password。");
   }
 
+  const index = await readJsonIfExists(join(input, "index.json"), { days: [] });
+  const days = await readJsonDir(join(input, "day"));
+  const digestIndex = await readJsonIfExists(join(input, "digest", "index.json"), { dates: [] });
+  const digests = await readJsonDir(join(input, "digest"));
+  const selectedDates = selectRecentDates(index, days, maxDays);
   const payload = {
     generated_at: new Date().toISOString(),
-    index: await readJsonIfExists(join(input, "index.json"), { days: [] }),
-    days: await readJsonDir(join(input, "day")),
-    digest_index: await readJsonIfExists(join(input, "digest", "index.json"), { dates: [] }),
-    digests: await readJsonDir(join(input, "digest")),
+    max_days: maxDays || null,
+    index: filterIndexDays(index, selectedDates),
+    days: filterObjectByDates(days, selectedDates),
+    digest_index: filterDigestIndex(digestIndex, selectedDates),
+    digests: filterObjectByDates(digests, selectedDates),
   };
 
   await mkdir(dirname(output), { recursive: true });

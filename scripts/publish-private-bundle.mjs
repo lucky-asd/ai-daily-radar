@@ -49,6 +49,7 @@ async function main() {
   const input = args.input || "web/data";
   const output = args.output || DEFAULT_OUTPUT;
   const buildArgs = [`${__dirname}/build-private-web-bundle.mjs`, "--input", input, "--output", output];
+  if (args["max-days"]) buildArgs.push("--max-days", args["max-days"]);
   if (args.password) buildArgs.push("--password", args.password);
   run("node", buildArgs);
 
