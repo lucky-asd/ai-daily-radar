@@ -2,7 +2,7 @@
 import { createCipheriv, pbkdf2Sync, randomBytes } from "node:crypto";
 import { gzipSync } from "node:zlib";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 const DEFAULT_ITERATIONS = 210000;
 
@@ -75,6 +75,26 @@ function filterDigestIndex(index, dates) {
   return { ...(index || {}), dates: (index?.dates || []).filter((date) => allowed.has(date)) };
 }
 
+async function readExternalDailyReports(input, dates) {
+  const repoRoot = resolve(input, "..", "..");
+  const allowed = new Set(dates);
+  const notionDaily = await readJsonDir(join(repoRoot, "data", "notion-daily"));
+  const out = {};
+  for (const [date, payload] of Object.entries(notionDaily || {})) {
+    if (!allowed.has(date) || !payload || typeof payload !== "object") continue;
+    out[date] = { notion_daily_digest: payload };
+  }
+  return out;
+}
+
+function mergeExternalReportsIntoDigests(digests, externalReports) {
+  const merged = { ...(digests || {}) };
+  for (const [date, reports] of Object.entries(externalReports || {})) {
+    merged[date] = { date, ...(merged[date] || {}), ...(reports || {}) };
+  }
+  return merged;
+}
+
 function encryptJson(payload, password) {
   const salt = randomBytes(16);
   const iv = randomBytes(12);
@@ -113,13 +133,18 @@ async function main() {
   const digestIndex = await readJsonIfExists(join(input, "digest", "index.json"), { dates: [] });
   const digests = await readJsonDir(join(input, "digest"));
   const selectedDates = selectRecentDates(index, days, maxDays);
+  const externalReports = await readExternalDailyReports(input, selectedDates);
+  const mergedDigests = mergeExternalReportsIntoDigests(digests, externalReports);
   const payload = {
     generated_at: new Date().toISOString(),
     max_days: maxDays || null,
     index: filterIndexDays(index, selectedDates),
     days: filterObjectByDates(days, selectedDates),
-    digest_index: filterDigestIndex(digestIndex, selectedDates),
-    digests: filterObjectByDates(digests, selectedDates),
+    digest_index: filterDigestIndex(
+      { ...digestIndex, dates: [...new Set([...(digestIndex?.dates || []), ...Object.keys(externalReports)])].sort().reverse() },
+      selectedDates,
+    ),
+    digests: filterObjectByDates(mergedDigests, selectedDates),
   };
 
   await mkdir(dirname(output), { recursive: true });
