@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createCipheriv, pbkdf2Sync, randomBytes } from "node:crypto";
 import { gzipSync } from "node:zlib";
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
 const DEFAULT_ITERATIONS = 210000;
@@ -118,10 +118,61 @@ function encryptJson(payload, password) {
   };
 }
 
+function buildPrivatePayload({ index, days, digestIndex, digests, selectedDates, externalReports, maxDays }) {
+  const mergedDigests = mergeExternalReportsIntoDigests(digests, externalReports);
+  return {
+    generated_at: new Date().toISOString(),
+    max_days: maxDays || null,
+    index: filterIndexDays(index, selectedDates),
+    days: filterObjectByDates(days, selectedDates),
+    digest_index: filterDigestIndex(
+      { ...digestIndex, dates: [...new Set([...(digestIndex?.dates || []), ...Object.keys(externalReports)])].sort().reverse() },
+      selectedDates,
+    ),
+    digests: filterObjectByDates(mergedDigests, selectedDates),
+  };
+}
+
+async function writeEncryptedJson(path, payload, password) {
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, JSON.stringify(encryptJson(payload, password), null, 2) + "\n", "utf8");
+}
+
+async function writeSplitBundle(outputDir, payload, password) {
+  await mkdir(outputDir, { recursive: true });
+  await rm(join(outputDir, "day"), { recursive: true, force: true });
+  await rm(join(outputDir, "digest"), { recursive: true, force: true });
+
+  const dayFiles = {};
+  const digestFiles = {};
+  for (const [date, day] of Object.entries(payload.days || {})) {
+    const file = `day/${date}.enc`;
+    dayFiles[date] = file;
+    await writeEncryptedJson(join(outputDir, file), day || { date, cards: [], items: [] }, password);
+  }
+  for (const [date, digest] of Object.entries(payload.digests || {})) {
+    const file = `digest/${date}.enc`;
+    digestFiles[date] = file;
+    await writeEncryptedJson(join(outputDir, file), digest || { date }, password);
+  }
+
+  await writeEncryptedJson(join(outputDir, "manifest.enc"), {
+    version: 1,
+    format: "split-v1",
+    generated_at: payload.generated_at,
+    max_days: payload.max_days,
+    index: payload.index,
+    digest_index: payload.digest_index,
+    days: dayFiles,
+    digests: digestFiles,
+  }, password);
+}
+
 async function main() {
   const args = parseArgs(process.argv);
   const input = args.input || "web/data";
   const output = args.output || "web/private/private.enc";
+  const splitOutput = args["split-output"] || args.splitOutput;
   const password = process.env.PRIVATE_BUNDLE_PASSWORD || args.password;
   const maxDays = parsePositiveInt(args["max-days"] || args.maxDays);
   if (!password) {
@@ -134,22 +185,16 @@ async function main() {
   const digests = await readJsonDir(join(input, "digest"));
   const selectedDates = selectRecentDates(index, days, maxDays);
   const externalReports = await readExternalDailyReports(input, selectedDates);
-  const mergedDigests = mergeExternalReportsIntoDigests(digests, externalReports);
-  const payload = {
-    generated_at: new Date().toISOString(),
-    max_days: maxDays || null,
-    index: filterIndexDays(index, selectedDates),
-    days: filterObjectByDates(days, selectedDates),
-    digest_index: filterDigestIndex(
-      { ...digestIndex, dates: [...new Set([...(digestIndex?.dates || []), ...Object.keys(externalReports)])].sort().reverse() },
-      selectedDates,
-    ),
-    digests: filterObjectByDates(mergedDigests, selectedDates),
-  };
+  const payload = buildPrivatePayload({ index, days, digestIndex, digests, selectedDates, externalReports, maxDays });
 
-  await mkdir(dirname(output), { recursive: true });
-  await writeFile(output, JSON.stringify(encryptJson(payload, password), null, 2) + "\n", "utf8");
-  console.log(`Wrote encrypted private bundle: ${output}`);
+  if (output) {
+    await writeEncryptedJson(output, payload, password);
+    console.log(`Wrote encrypted private bundle: ${output}`);
+  }
+  if (splitOutput) {
+    await writeSplitBundle(splitOutput, payload, password);
+    console.log(`Wrote split private bundle: ${splitOutput}`);
+  }
 }
 
 main().catch((err) => {

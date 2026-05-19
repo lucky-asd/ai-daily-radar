@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_OUTPUT = "web/private/private.enc";
+const DEFAULT_SPLIT_OUTPUT = "web/private";
 
 function parseArgs(argv) {
   const args = { commit: false, push: false };
@@ -34,7 +35,7 @@ function runGit(args, options = {}) {
 }
 
 function usage() {
-  return `Usage:\n  PRIVATE_BUNDLE_PASSWORD='...' node scripts/publish-private-bundle.mjs [--input web/data] [--output web/private/private.enc] [--commit] [--push]\n\nThis builds the encrypted private bundle, optionally commits it with git, and optionally pushes it.\nOnly ${DEFAULT_OUTPUT} should be published; do not commit raw web/data or secrets.\n`;
+  return `Usage:\n  PRIVATE_BUNDLE_PASSWORD='...' node scripts/publish-private-bundle.mjs [--input web/data] [--output web/private/private.enc] [--split-output web/private] [--commit] [--push]\n\nThis builds the encrypted private bundle, optionally commits it with git, and optionally pushes it.\nThe site prefers the split bundle at ${DEFAULT_SPLIT_OUTPUT}/manifest.enc and keeps ${DEFAULT_OUTPUT} as a fallback.\nDo not commit raw web/data or secrets.\n`;
 }
 
 async function main() {
@@ -48,13 +49,16 @@ async function main() {
   }
   const input = args.input || "web/data";
   const output = args.output || DEFAULT_OUTPUT;
+  const splitOutput = args["split-output"] || args.splitOutput || DEFAULT_SPLIT_OUTPUT;
   const buildArgs = [`${__dirname}/build-private-web-bundle.mjs`, "--input", input, "--output", output];
+  if (splitOutput) buildArgs.push("--split-output", splitOutput);
   if (args["max-days"]) buildArgs.push("--max-days", args["max-days"]);
   if (args.password) buildArgs.push("--password", args.password);
   run("node", buildArgs);
 
   if (args.commit || args.push) {
     run("git", ["add", output]);
+    if (splitOutput) run("git", ["add", splitOutput]);
   }
   if (args.commit) {
     const message = args.message || "Update private encrypted bundle";

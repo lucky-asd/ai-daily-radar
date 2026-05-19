@@ -137,6 +137,7 @@ const state = {
   sections: loadSections(),   // { EDITIONS: true, ... }
   workbenchExpanded: loadWorkbenchExpanded(),
   privateBundle: null,
+  privateBundlePassword: "",
 };
 
 // Some upstream items come in malformed with markdown in the title,
@@ -226,6 +227,18 @@ async function decodePrivatePlaintext(buffer, compression) {
   }
   const stream = new Blob([buffer]).stream().pipeThrough(new DecompressionStream("gzip"));
   return new Response(stream).text();
+}
+
+function privateCacheBust(url) {
+  return `${url}${url.includes("?") ? "&" : "?"}v=${Date.now()}`;
+}
+
+function privateBaseUrl(url) {
+  return url.slice(0, url.lastIndexOf("/") + 1);
+}
+
+function privateRelativeUrl(baseUrl, path) {
+  return `${baseUrl}${String(path || "").replace(/^\/+/, "")}`;
 }
 
 function loadSettings() {
@@ -1382,17 +1395,22 @@ function applyStaticModeChrome() {
   if (copy) copy.textContent = "这是 GitHub Pages 静态站：只能调整本机阅读偏好，数据由 GitHub Actions 自动更新。";
 }
 
-async function applyPrivateBundle(bundle) {
+async function applyPrivateBundle(bundle, password = "") {
   if (!bundle?.index) throw new Error("私有数据包里没有 index 数据");
   state.privateBundle = bundle;
+  state.privateBundlePassword = password || state.privateBundlePassword || "";
   state.index = bundle.index || { days: [] };
   state.loadedDays.clear();
-  for (const [date, day] of Object.entries(bundle.days || {})) {
-    state.loadedDays.set(date, day || { date, cards: [], items: [] });
+  if (bundle.format !== "split-v1") {
+    for (const [date, day] of Object.entries(bundle.days || {})) {
+      state.loadedDays.set(date, day || { date, cards: [], items: [] });
+    }
   }
   state.digestCache.clear();
-  for (const [date, digest] of Object.entries(bundle.digests || {})) {
-    state.digestCache.set(date, digest);
+  if (bundle.format !== "split-v1") {
+    for (const [date, digest] of Object.entries(bundle.digests || {})) {
+      state.digestCache.set(date, digest);
+    }
   }
   const digestDates = Object.keys(bundle.digests || {}).sort().reverse();
   state.digestIndex = bundle.digest_index || bundle.digestIndex || { dates: digestDates };
@@ -1448,16 +1466,41 @@ function closePrivateUnlockModal() {
   $("#private-unlock-btn")?.focus();
 }
 
-async function fetchPrivateBundleEnvelope() {
-  const urls = ["private/private.enc", "data/private/private.enc"];
+async function fetchPrivateEnvelopeFromCandidates(urls, options = {}) {
   let lastStatus = 0;
   for (const url of urls) {
-    const res = await fetch(`${url}?v=${Date.now()}`, { cache: "no-store" });
-    if (res.ok) return res.json();
+    const res = await fetch(privateCacheBust(url), { cache: "no-store" });
+    if (res.ok) return { envelope: await res.json(), baseUrl: privateBaseUrl(url), url };
     lastStatus = res.status;
     if (res.status !== 404) throw new Error(`读取私有包失败：${res.status}`);
   }
+  if (options.missingOk) return null;
   throw new Error(lastStatus === 404 ? "还没有上传私有加密包" : "读取私有包失败");
+}
+
+async function fetchPrivateBundleEnvelope() {
+  const found = await fetchPrivateEnvelopeFromCandidates(["private/private.enc", "data/private/private.enc"]);
+  return found.envelope;
+}
+
+async function decryptPrivatePart(baseUrl, path, password) {
+  const url = privateRelativeUrl(baseUrl, path);
+  const res = await fetch(privateCacheBust(url), { cache: "no-store" });
+  if (!res.ok) throw new Error(`读取私有分片失败：${res.status}`);
+  return decryptPrivateBundle(await res.json(), password);
+}
+
+async function fetchSplitPrivateBundle(password) {
+  const found = await fetchPrivateEnvelopeFromCandidates(["private/manifest.enc", "data/private/manifest.enc"], { missingOk: true });
+  if (!found) return null;
+  const manifest = await decryptPrivateBundle(found.envelope, password);
+  if (manifest?.format !== "split-v1") throw new Error("私有分片清单格式不支持");
+  return {
+    ...manifest,
+    baseUrl: found.baseUrl,
+    days: manifest.days || {},
+    digests: manifest.digests || {},
+  };
 }
 
 async function unlockPrivateBundle(password) {
@@ -1471,9 +1514,9 @@ async function unlockPrivateBundle(password) {
     $("#private-unlock-submit")?.setAttribute("disabled", "");
     setPrivateUnlockStatus("正在本地解密私有数据…", "loading");
     setRefreshStatus("loading", "正在本地解密私有数据…");
-    const encrypted = await fetchPrivateBundleEnvelope();
-    const bundle = await decryptPrivateBundle(encrypted, password);
-    await applyPrivateBundle(bundle);
+    const splitBundle = await fetchSplitPrivateBundle(password);
+    const bundle = splitBundle || await decryptPrivateBundle(await fetchPrivateBundleEnvelope(), password);
+    await applyPrivateBundle(bundle, password);
     btn?.setAttribute("data-state", "success");
     btn?.setAttribute("title", "私有数据已解锁");
     setPrivateUnlockStatus("已解锁。", "success");
@@ -3000,6 +3043,19 @@ function renderWorkbenchModeButton(mode, label) {
 
 async function ensureDay(date) {
   if (state.loadedDays.has(date)) return;
+  if (state.privateBundle?.format === "split-v1") {
+    const path = state.privateBundle.days?.[date];
+    if (!path) {
+      state.loadedDays.set(date, { date, cards: [], items: [] });
+      return;
+    }
+    try {
+      state.loadedDays.set(date, await decryptPrivatePart(state.privateBundle.baseUrl, path, state.privateBundlePassword));
+    } catch {
+      state.loadedDays.set(date, { date, cards: [], items: [] });
+    }
+    return;
+  }
   try {
     const res = await fetch(`data/day/${date}.json?v=${state.cacheToken}`, { cache: "no-store" });
     state.loadedDays.set(date, await res.json());
@@ -3423,6 +3479,13 @@ function renderDigestBriefBoard(title, subtitle, rows = [], options = {}) {
 async function loadDigest(date) {
   if (!date) return null;
   if (state.digestCache.has(date)) return state.digestCache.get(date);
+  if (state.privateBundle?.format === "split-v1") {
+    const path = state.privateBundle.digests?.[date];
+    if (!path) return null;
+    const payload = await decryptPrivatePart(state.privateBundle.baseUrl, path, state.privateBundlePassword);
+    state.digestCache.set(date, payload);
+    return payload;
+  }
   const url = IS_STATIC_SITE
     ? `data/digest/${encodeURIComponent(date)}.json?v=${state.cacheToken}`
     : `/api/digest/${encodeURIComponent(date)}`;
