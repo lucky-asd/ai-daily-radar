@@ -58,7 +58,7 @@ async function fetchJson(path) {
 
 async function boot() {
   try {
-    const index = await fetchJson("data/digest/index.json");
+    const index = await loadDateIndex();
     state.dates = (index.dates || []).filter(Boolean);
     const requestedDate = new URLSearchParams(window.location.search).get("date");
     state.date = state.dates.includes(requestedDate) ? requestedDate : state.dates[0] || null;
@@ -73,13 +73,20 @@ async function boot() {
 async function loadDate(date) {
   state.date = date;
   const [digest, day] = await Promise.all([
-    fetchJson(`data/digest/${encodeURIComponent(date)}.json`),
+    fetchJson(`data/digest/${encodeURIComponent(date)}.json`).catch(() => null),
     fetchJson(`data/day/${encodeURIComponent(date)}.json`).catch(() => ({ date, items: [] })),
   ]);
   state.digest = digest;
   state.day = day;
   syncUrlDate();
   render();
+}
+
+async function loadDateIndex() {
+  const digestIndex = await fetchJson("data/digest/index.json").catch(() => null);
+  if (digestIndex?.dates?.length) return digestIndex;
+  const publicIndex = await fetchJson("data/index.json");
+  return { dates: (publicIndex.days || []).map((day) => day.date).filter(Boolean) };
 }
 
 function wireControls() {
@@ -123,7 +130,8 @@ function renderHero() {
   const items = state.day?.items || [];
   const mustCount = items.filter((item) => item.pm_label === "必读").length;
   const worthCount = items.filter((item) => item.pm_label === "值得读").length;
-  const judgment = memo.main_judgment || memo.main_line || memo.why_it_matters || digest.top5?.[0]?.why_hot;
+  const fallbackLine = publicDailyLine(items);
+  const judgment = memo.main_judgment || memo.main_line || memo.why_it_matters || digest.top5?.[0]?.why_hot || fallbackLine;
 
   $("#date-pill").textContent = `${relativeDate(state.date)} · ${state.date}`;
   $("#freshness").textContent = `${formatDate(state.date)} 日报`;
@@ -139,7 +147,7 @@ function renderStories() {
   const mount = $("#story-list");
   const template = $("#story-template");
   mount.innerHTML = "";
-  const stories = state.digest?.top5 || [];
+  const stories = state.digest?.top5 || publicStories(state.day?.items || []);
   if (!stories.length) {
     mount.appendChild(note("这一天还没有日报主线。"));
     return;
@@ -149,9 +157,9 @@ function renderStories() {
     $(".story-rank", node).textContent = index + 1;
     const title = $(".story-title", node);
     title.textContent = text(story.title, "未命名主线");
-    title.href = firstStoryUrl(story) || `index.html?date=${encodeURIComponent(state.date)}`;
-    $(".story-what", node).textContent = cleanCopy(story.what_happened, 230);
-    $(".story-why", node).textContent = cleanCopy(story.why_hot, 250);
+    title.href = firstStoryUrl(story) || story.url || `index.html?date=${encodeURIComponent(state.date)}`;
+    $(".story-what", node).textContent = cleanCopy(story.what_happened || story.summary, 230);
+    $(".story-why", node).textContent = cleanCopy(story.why_hot || story.pm_reason, 250);
     const tags = [...(story.related_entities || []), ...(story.related_topics || [])].slice(0, 5);
     $(".tag-row", node).append(...tags.map((tag) => {
       const el = document.createElement("span");
@@ -225,6 +233,27 @@ function recommendedItems() {
   if (state.filter === "must") items = items.filter((item) => item.pm_label === "必读");
   if (state.filter === "worth") items = items.filter((item) => item.pm_label === "值得读");
   return items.sort((a, b) => Number(b.pm_score || 0) - Number(a.pm_score || 0));
+}
+
+function publicStories(items) {
+  return [...items]
+    .filter((item) => item.url && (item.pm_label === "必读" || item.pm_label === "值得读" || Number(item.pm_score || 0) >= 80))
+    .sort((a, b) => Number(b.pm_score || 0) - Number(a.pm_score || 0))
+    .slice(0, 5)
+    .map((item) => ({
+      title: item.title,
+      url: item.url,
+      summary: item.summary,
+      pm_reason: item.pm_reason || `${item.source || item.author || "公开源"} · ${item.pm_label || "推荐"}`,
+      related_entities: item.entity_tags || [],
+      related_topics: item.topic_tags || [],
+    }));
+}
+
+function publicDailyLine(items) {
+  const top = publicStories(items).slice(0, 3).map((item) => item.title).filter(Boolean);
+  if (!top.length) return "公开版数据已更新，先从今日高价值推荐开始读。";
+  return `公开版数据已更新，今天先看：${top.join("、")}。`;
 }
 
 function firstStoryUrl(story) {

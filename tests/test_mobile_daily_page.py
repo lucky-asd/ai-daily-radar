@@ -25,8 +25,11 @@ class MobileDailyPageTests(unittest.TestCase):
     def test_mobile_page_reads_existing_digest_and_day_json(self):
         text = MOBILE_JS.read_text(encoding="utf-8")
         self.assertIn("data/digest/index.json", text)
+        self.assertIn("data/index.json", text)
         self.assertIn("data/digest/${encodeURIComponent(date)}.json", text)
         self.assertIn("data/day/${encodeURIComponent(date)}.json", text)
+        self.assertIn("loadDateIndex", text)
+        self.assertIn("publicStories", text)
         self.assertIn('get("date")', text)
         self.assertIn("syncUrlDate", text)
         self.assertIn("firstStoryUrl", text)
