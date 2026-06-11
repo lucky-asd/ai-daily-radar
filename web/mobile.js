@@ -230,16 +230,20 @@ function recommendedItems() {
     byId.set(key, item);
   }
   let items = [...byId.values()].filter((item) => ["必读", "值得读"].includes(item.pm_label));
+  if (!items.length) items = publicStories(fromDay, 24);
   if (state.filter === "must") items = items.filter((item) => item.pm_label === "必读");
   if (state.filter === "worth") items = items.filter((item) => item.pm_label === "值得读");
+  if (!items.length && !fromDay.some((item) => item.pm_label)) items = publicStories(fromDay, 24);
   return items.sort((a, b) => Number(b.pm_score || 0) - Number(a.pm_score || 0));
 }
 
-function publicStories(items) {
-  return [...items]
+function publicStories(items, limit = 5) {
+  const candidates = [...items]
     .filter((item) => item.url && (item.pm_label === "必读" || item.pm_label === "值得读" || Number(item.pm_score || 0) >= 80))
-    .sort((a, b) => Number(b.pm_score || 0) - Number(a.pm_score || 0))
-    .slice(0, 5)
+    .sort((a, b) => Number(b.pm_score || 0) - Number(a.pm_score || 0));
+  const fallback = candidates.length ? candidates : [...items].filter((item) => item.url && item.title);
+  return fallback
+    .slice(0, limit)
     .map((item) => ({
       title: item.title,
       url: item.url,
