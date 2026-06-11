@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>AI Feed · Mobile Daily</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,400..800,0..100&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="mobile.css?v=20260612-mobile-daily" />
+</head>
+<body>
+  <main class="phone-shell">
+    <header class="mobile-hero">
+      <div class="hero-topline">
+        <span class="brand-mark">AI Feed</span>
+        <a class="desk-link" href="index.html" aria-label="打开桌面版">桌面版</a>
+      </div>
+      <div class="date-row">
+        <button class="date-step" id="prev-date" type="button" aria-label="前一天">‹</button>
+        <button class="date-pill" id="date-pill" type="button">读取中</button>
+        <button class="date-step" id="next-date" type="button" aria-label="后一天">›</button>
+      </div>
+      <div class="date-rail" id="date-rail" aria-label="其他日报"></div>
+      <p class="eyebrow" id="freshness">Daily briefing</p>
+      <h1 id="main-judgment">正在读取今日日报</h1>
+      <p class="main-line" id="main-line">请稍等一下。</p>
+      <div class="hero-metrics" aria-label="日报覆盖">
+        <div>
+          <strong id="metric-items">--</strong>
+          <span>条信息</span>
+        </div>
+        <div>
+          <strong id="metric-must">--</strong>
+          <span>必读</span>
+        </div>
+        <div>
+          <strong id="metric-worth">--</strong>
+          <span>值得读</span>
+        </div>
+      </div>
+    </header>
+
+    <section class="section-block" id="story-section">
+      <div class="section-head">
+        <p>日报</p>
+        <h2>五个主线</h2>
+      </div>
+      <div class="story-list" id="story-list"></div>
+    </section>
+
+    <section class="section-block">
+      <div class="section-head compact">
+        <p>昨日推荐</p>
+        <h2 id="recommend-title">先读这些</h2>
+      </div>
+      <div class="filter-strip" role="tablist" aria-label="推荐筛选">
+        <button class="filter-chip active" data-filter="must" type="button">必读</button>
+        <button class="filter-chip" data-filter="worth" type="button">值得读</button>
+        <button class="filter-chip" data-filter="all" type="button">全部推荐</button>
+      </div>
+      <div class="recommend-list" id="recommend-list"></div>
+    </section>
+  </main>
+
+  <nav class="bottom-nav" aria-label="页面跳转">
+    <a href="#story-section">日报</a>
+    <button id="jump-recommend" type="button">推荐</button>
+    <a id="desktop-date-link" href="index.html">详情</a>
+  </nav>
+
+  <template id="story-template">
+    <article class="story-card">
+      <div class="story-rank"></div>
+      <h3><a class="story-title" target="_blank" rel="noopener"></a></h3>
+      <p class="story-what"></p>
+      <p class="story-why"></p>
+      <div class="tag-row"></div>
+    </article>
+  </template>
+
+  <template id="item-template">
+    <article class="item-card">
+      <a class="item-title" target="_blank" rel="noopener"></a>
+      <p class="item-summary"></p>
+      <p class="item-reason"></p>
+      <div class="item-meta"></div>
+    </article>
+  </template>
+
+  <script src="mobile.js?v=20260612-mobile-daily"></script>
+</body>
+</html>
