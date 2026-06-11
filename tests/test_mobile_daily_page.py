@@ -30,6 +30,7 @@ class MobileDailyPageTests(unittest.TestCase):
         self.assertIn("data/day/${encodeURIComponent(date)}.json", text)
         self.assertIn("loadDateIndex", text)
         self.assertIn("publicStories", text)
+        self.assertIn("shouldTryDigestData", text)
         self.assertIn('get("date")', text)
         self.assertIn("syncUrlDate", text)
         self.assertIn("firstStoryUrl", text)

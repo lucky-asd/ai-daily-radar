@@ -3,11 +3,13 @@ const state = {
   date: null,
   digest: null,
   day: null,
+  hasDigestData: false,
   filter: "must",
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+const LOCAL_HOSTS = new Set(["", "localhost", "127.0.0.1", "::1"]);
 
 function text(value, fallback = "") {
   return String(value || fallback || "").trim();
@@ -73,7 +75,7 @@ async function boot() {
 async function loadDate(date) {
   state.date = date;
   const [digest, day] = await Promise.all([
-    fetchJson(`data/digest/${encodeURIComponent(date)}.json`).catch(() => null),
+    state.hasDigestData ? fetchJson(`data/digest/${encodeURIComponent(date)}.json`).catch(() => null) : Promise.resolve(null),
     fetchJson(`data/day/${encodeURIComponent(date)}.json`).catch(() => ({ date, items: [] })),
   ]);
   state.digest = digest;
@@ -83,10 +85,20 @@ async function loadDate(date) {
 }
 
 async function loadDateIndex() {
-  const digestIndex = await fetchJson("data/digest/index.json").catch(() => null);
-  if (digestIndex?.dates?.length) return digestIndex;
+  if (shouldTryDigestData()) {
+    const digestIndex = await fetchJson("data/digest/index.json").catch(() => null);
+    if (digestIndex?.dates?.length) {
+      state.hasDigestData = true;
+      return digestIndex;
+    }
+  }
+  state.hasDigestData = false;
   const publicIndex = await fetchJson("data/index.json");
   return { dates: (publicIndex.days || []).map((day) => day.date).filter(Boolean) };
+}
+
+function shouldTryDigestData() {
+  return window.location.protocol === "file:" || LOCAL_HOSTS.has(window.location.hostname);
 }
 
 function wireControls() {
