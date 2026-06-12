@@ -112,6 +112,9 @@ function wireControls() {
   $("#jump-recommend").addEventListener("click", () => {
     $("#recommend-title").scrollIntoView({ behavior: "smooth", block: "start" });
   });
+  $("#jump-briefings").addEventListener("click", () => {
+    $("#briefing-section").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
   $$(".filter-chip").forEach((button) => {
     button.addEventListener("click", () => {
       state.filter = button.dataset.filter || "must";
@@ -132,6 +135,7 @@ function render() {
   renderHero();
   renderDateRail();
   renderStories();
+  renderBriefings();
   renderRecommendations();
   syncDateButtons();
 }
@@ -197,6 +201,153 @@ function renderDateRail() {
     button.addEventListener("click", () => loadDate(date));
     rail.appendChild(button);
   }
+}
+
+function renderBriefings() {
+  const mount = $("#briefing-list");
+  const template = $("#briefing-template");
+  mount.innerHTML = "";
+  const cards = briefingCards();
+  if (!cards.length) {
+    mount.appendChild(note("这一天没有更多日报视角。"));
+    return;
+  }
+  for (const card of cards) {
+    const node = template.content.firstElementChild.cloneNode(true);
+    $(".briefing-kicker", node).textContent = card.kicker;
+    $(".briefing-card h3", node).textContent = card.title;
+    $(".briefing-body", node).textContent = cleanCopy(card.body, 240);
+    const rows = $(".briefing-rows", node);
+    for (const row of card.rows || []) rows.appendChild(briefingRow(row));
+    mount.appendChild(node);
+  }
+}
+
+function briefingCards() {
+  const digest = state.digest || {};
+  if (!digest || !Object.keys(digest).length) return publicBriefingCards(state.day?.items || []);
+  const memo = digest.pm_memo || digest.pm_analysis || {};
+  const cards = [];
+  if (memo.main_judgment || memo.hotspot_analysis?.length || memo.pm_implications?.length) {
+    cards.push({
+      kicker: "PM Memo",
+      title: "产品判断",
+      body: memo.main_judgment || memo.main_line || "今日 PM 备忘。",
+      rows: [
+        ...(memo.hotspot_analysis || []).slice(0, 3).map((row) => ({ title: row.title, text: row.analysis })),
+        ...(memo.pm_implications || []).slice(0, 2).map((text, index) => ({ title: `产品启发 ${index + 1}`, text })),
+      ],
+    });
+  }
+  const outsideRows = outsideDigestRows(digest);
+  if (outsideRows.length) {
+    cards.push({
+      kicker: "External Daily",
+      title: "外部日报",
+      body: "同步进来的其他日报来源。",
+      rows: outsideRows,
+    });
+  }
+  if (digest.analysis_groups?.length) {
+    cards.push({
+      kicker: "Clusters",
+      title: "分析分组",
+      body: "把同题内容合并后的高密度议题。",
+      rows: digest.analysis_groups.slice(0, 6).map((group) => ({
+        title: group.representative_title,
+        text: group.summary || group.pm_reason,
+        meta: [`${group.mention_count || group.group_size || 0} 次`, ...(group.related_entities || group.entities || []).slice(0, 2)],
+        href: group.example_items?.find((item) => item.url)?.url,
+      })),
+    });
+  }
+  return cards;
+}
+
+function outsideDigestRows(digest) {
+  const rows = [];
+  const notion = digest.notion_daily_digest;
+  if (notion) {
+    rows.push({
+      title: notion.title || notion.source_name || "Gorden AI资讯日报",
+      text: notion.main_line || `${notion.item_count || 0} 条`,
+      href: notion.page_url || notion.source_url,
+      meta: [notion.source_name || notion.source || "Notion", `${notion.item_count || notion.items?.length || 0} 条`],
+    });
+    for (const item of notion.items || []) {
+      rows.push({ title: item.title, text: item.summary, href: item.url, meta: [`#${item.rank || ""}`.replace(/#$/, ""), "Gorden"].filter(Boolean) });
+    }
+  }
+  const aiDaily = digest.ai_daily_digest;
+  if (aiDaily) {
+    rows.push({
+      title: "AI精选日报",
+      text: aiDaily.summary || aiDaily.highlights || aiDaily.top_picks_note,
+      meta: [`${aiDaily.selected_count || aiDaily.articles?.length || 0} 篇`, `${aiDaily.total_articles || 0} 总量`],
+    });
+    for (const item of aiDaily.top_picks || []) {
+      rows.push({ title: item.title, text: item.summary || item.reason, href: item.url, meta: [item.source_name, item.score ? `${item.score} 分` : ""].filter(Boolean) });
+    }
+  }
+  return rows.slice(0, 10);
+}
+
+function publicBriefingCards(items) {
+  const sourceCounts = new Map();
+  const categoryCounts = new Map();
+  for (const item of items) {
+    sourceCounts.set(item.source || "来源未知", (sourceCounts.get(item.source || "来源未知") || 0) + 1);
+    categoryCounts.set(item.category || "未分类", (categoryCounts.get(item.category || "未分类") || 0) + 1);
+  }
+  return [
+    {
+      kicker: "Public Daily",
+      title: "公开版摘要",
+      body: publicDailyLine(items),
+      rows: publicStories(items, 5).map((item) => ({ title: item.title, text: item.summary, href: item.url, meta: [item.source || "公开源"] })),
+    },
+    {
+      kicker: "Sources",
+      title: "来源分布",
+      body: "公开版没有完整 PM digest，先展示当天公开数据的来源和栏目分布。",
+      rows: [
+        ...topEntries(sourceCounts, 5).map(([title, count]) => ({ title, text: `${count} 条信息`, meta: ["来源"] })),
+        ...topEntries(categoryCounts, 5).map(([title, count]) => ({ title, text: `${count} 条信息`, meta: ["栏目"] })),
+      ],
+    },
+  ];
+}
+
+function topEntries(map, limit) {
+  return [...map.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, limit);
+}
+
+function briefingRow(row) {
+  const wrap = document.createElement("div");
+  wrap.className = "briefing-row";
+  const title = row.href ? document.createElement("a") : document.createElement("strong");
+  title.className = "briefing-row-title";
+  title.textContent = text(row.title, "未命名");
+  if (row.href) {
+    title.href = row.href;
+    title.target = "_blank";
+    title.rel = "noopener";
+  }
+  wrap.appendChild(title);
+  const body = cleanCopy(row.text, 190);
+  if (body) {
+    const p = document.createElement("p");
+    p.className = "briefing-row-text";
+    p.textContent = body;
+    wrap.appendChild(p);
+  }
+  if (row.meta?.length) {
+    const meta = document.createElement("div");
+    meta.className = "briefing-row-meta";
+    for (const value of row.meta.filter(Boolean).slice(0, 4)) meta.appendChild(metaPill(value));
+    wrap.appendChild(meta);
+  }
+  return wrap;
 }
 
 function renderRecommendations() {

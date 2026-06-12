@@ -17,12 +17,18 @@
         <span class="brand-mark">AI Feed</span>
         <a class="desk-link" href="index.html" aria-label="打开桌面版">桌面版</a>
       </div>
+    </header>
+
+    <div class="date-dock">
       <div class="date-row">
         <button class="date-step" id="prev-date" type="button" aria-label="前一天">‹</button>
         <button class="date-pill" id="date-pill" type="button">读取中</button>
         <button class="date-step" id="next-date" type="button" aria-label="后一天">›</button>
       </div>
       <div class="date-rail" id="date-rail" aria-label="其他日报"></div>
+    </div>
+
+    <section class="hero-summary" aria-label="日报摘要">
       <p class="eyebrow" id="freshness">Daily briefing</p>
       <h1 id="main-judgment">正在读取今日日报</h1>
       <p class="main-line" id="main-line">请稍等一下。</p>
@@ -40,7 +46,7 @@
           <span>值得读</span>
         </div>
       </div>
-    </header>
+    </section>
 
     <section class="section-block" id="story-section">
       <div class="section-head">
@@ -48,6 +54,14 @@
         <h2>五个主线</h2>
       </div>
       <div class="story-list" id="story-list"></div>
+    </section>
+
+    <section class="section-block" id="briefing-section">
+      <div class="section-head compact">
+        <p>其他日报</p>
+        <h2>多个视角</h2>
+      </div>
+      <div class="briefing-list" id="briefing-list"></div>
     </section>
 
     <section class="section-block">
@@ -66,6 +80,7 @@
 
   <nav class="bottom-nav" aria-label="页面跳转">
     <a href="#story-section">日报</a>
+    <button id="jump-briefings" type="button">更多</button>
     <button id="jump-recommend" type="button">推荐</button>
     <a id="desktop-date-link" href="index.html">详情</a>
   </nav>
@@ -86,6 +101,15 @@
       <p class="item-summary"></p>
       <p class="item-reason"></p>
       <div class="item-meta"></div>
+    </article>
+  </template>
+
+  <template id="briefing-template">
+    <article class="briefing-card">
+      <p class="briefing-kicker"></p>
+      <h3></h3>
+      <p class="briefing-body"></p>
+      <div class="briefing-rows"></div>
     </article>
   </template>
 

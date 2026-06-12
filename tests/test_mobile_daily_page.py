@@ -17,7 +17,10 @@ class MobileDailyPageTests(unittest.TestCase):
         self.assertIn("mobile.js", html)
         self.assertIn("viewport-fit=cover", html)
         self.assertIn("date-rail", html)
+        self.assertIn("date-dock", html)
         self.assertIn("story-title", html)
+        self.assertIn("briefing-section", html)
+        self.assertIn("briefing-template", html)
 
         workflow = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("path: web", workflow)
@@ -30,6 +33,9 @@ class MobileDailyPageTests(unittest.TestCase):
         self.assertIn("data/day/${encodeURIComponent(date)}.json", text)
         self.assertIn("loadDateIndex", text)
         self.assertIn("publicStories", text)
+        self.assertIn("renderBriefings", text)
+        self.assertIn("outsideDigestRows", text)
+        self.assertIn("publicBriefingCards", text)
         self.assertIn("shouldTryDigestData", text)
         self.assertIn('get("date")', text)
         self.assertIn("syncUrlDate", text)
@@ -44,6 +50,9 @@ class MobileDailyPageTests(unittest.TestCase):
         self.assertIn("position: fixed", css)
         self.assertIn("env(safe-area-inset-bottom)", css)
         self.assertIn(".date-rail", css)
+        self.assertIn(".date-dock", css)
+        self.assertIn(".briefing-card", css)
+        self.assertIn(".briefing-row", css)
         self.assertNotIn("min-height: 78svh", css)
 
 
