@@ -5,8 +5,8 @@ on:
   push:
     branches: [main]
   schedule:
-    # GitHub Actions uses UTC. This updates roughly every hour at :17.
-    - cron: "17 * * * *"
+    # GitHub Actions uses UTC. This updates roughly every hour at :23.
+    - cron: "23 * * * *"
 
 permissions:
   contents: read
