@@ -12,7 +12,7 @@ function parseArgs(argv) {
     const key = argv[i];
     if (!key.startsWith("--")) continue;
     const name = key.slice(2);
-    if (name === "skip-monolith") {
+    if (["skip-monolith", "flat-parts"].includes(name)) {
       args[name] = true;
       continue;
     }
@@ -177,48 +177,75 @@ async function writeEncryptedJsonIfChanged(path, payload, password) {
   return true;
 }
 
-async function removeUnselectedParts(dir, selectedFiles) {
+async function removeUnselectedParts(dir, selectedFiles, shouldManage = () => true) {
   const allowed = new Set(selectedFiles);
+  const removed = [];
   let entries = [];
   try {
     entries = await readdir(dir, { withFileTypes: true });
   } catch (err) {
-    if (err?.code === "ENOENT") return;
+    if (err?.code === "ENOENT") return removed;
     throw err;
   }
   for (const entry of entries) {
-    if (entry.isFile() && entry.name.endsWith(".enc") && !allowed.has(entry.name)) {
+    if (entry.isFile() && entry.name.endsWith(".enc") && shouldManage(entry.name) && !allowed.has(entry.name)) {
       await rm(join(dir, entry.name), { force: true });
+      removed.push(entry.name);
     }
   }
+  return removed;
 }
 
-async function writeSplitBundle(outputDir, payload, password) {
+async function writeSplitBundle(outputDir, payload, password, flatParts = false) {
   await mkdir(outputDir, { recursive: true });
 
   const dayFiles = {};
   const digestFiles = {};
   let changedDays = 0;
   let changedDigests = 0;
+  const changedFiles = [];
   for (const [date, day] of Object.entries(payload.days || {})) {
-    const file = `day/${date}.enc`;
+    const file = flatParts ? `day-${date}.enc` : `day/${date}.enc`;
     dayFiles[date] = file;
     if (await writeEncryptedJsonIfChanged(
       join(outputDir, file),
       day || { date, cards: [], items: [] },
       password,
-    )) changedDays += 1;
+    )) {
+      changedDays += 1;
+      changedFiles.push(file);
+    }
   }
   for (const [date, digest] of Object.entries(payload.digests || {})) {
-    const file = `digest/${date}.enc`;
+    const file = flatParts ? `digest-${date}.enc` : `digest/${date}.enc`;
     digestFiles[date] = file;
     if (await writeEncryptedJsonIfChanged(join(outputDir, file), digest || { date }, password)) {
       changedDigests += 1;
+      changedFiles.push(file);
     }
   }
 
-  await removeUnselectedParts(join(outputDir, "day"), Object.values(dayFiles).map((file) => file.split("/").pop()));
-  await removeUnselectedParts(join(outputDir, "digest"), Object.values(digestFiles).map((file) => file.split("/").pop()));
+  let removedFiles = [];
+  if (flatParts) {
+    removedFiles = await removeUnselectedParts(
+      outputDir,
+      [...Object.values(dayFiles), ...Object.values(digestFiles)],
+      (name) => name.startsWith("day-") || name.startsWith("digest-"),
+    );
+  } else {
+    const removedDays = await removeUnselectedParts(
+      join(outputDir, "day"),
+      Object.values(dayFiles).map((file) => file.split("/").pop()),
+    );
+    const removedDigests = await removeUnselectedParts(
+      join(outputDir, "digest"),
+      Object.values(digestFiles).map((file) => file.split("/").pop()),
+    );
+    removedFiles = [
+      ...removedDays.map((file) => `day/${file}`),
+      ...removedDigests.map((file) => `digest/${file}`),
+    ];
+  }
 
   await writeEncryptedJson(join(outputDir, "manifest.enc"), {
     version: 1,
@@ -230,7 +257,8 @@ async function writeSplitBundle(outputDir, payload, password) {
     days: dayFiles,
     digests: digestFiles,
   }, password);
-  return { changedDays, changedDigests };
+  changedFiles.push("manifest.enc");
+  return { changedDays, changedDigests, changedFiles, removedFiles };
 }
 
 async function main() {
@@ -240,6 +268,7 @@ async function main() {
   const splitOutput = args["split-output"] || args.splitOutput;
   const password = process.env.PRIVATE_BUNDLE_PASSWORD || args.password;
   const maxDays = parsePositiveInt(args["max-days"] || args.maxDays);
+  const flatParts = args["flat-parts"] === true;
   if (!password) {
     throw new Error("请设置 PRIVATE_BUNDLE_PASSWORD，或传入 --password。");
   }
@@ -257,11 +286,15 @@ async function main() {
     console.log(`Wrote encrypted private bundle: ${output}`);
   }
   if (splitOutput) {
-    const changes = await writeSplitBundle(splitOutput, payload, password);
+    const changes = await writeSplitBundle(splitOutput, payload, password, flatParts);
     console.log(
       `Wrote split private bundle: ${splitOutput} `
       + `(changed days: ${changes.changedDays}, digests: ${changes.changedDigests})`,
     );
+    if (args["changes-output"]) {
+      await mkdir(dirname(args["changes-output"]), { recursive: true });
+      await writeFile(args["changes-output"], JSON.stringify(changes, null, 2) + "\n", "utf8");
+    }
   }
 }
 

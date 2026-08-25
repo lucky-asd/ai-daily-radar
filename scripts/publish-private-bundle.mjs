@@ -13,7 +13,7 @@ function parseArgs(argv) {
     const key = argv[i];
     if (!key.startsWith("--")) continue;
     const name = key.slice(2);
-    if (["commit", "push", "help", "skip-monolith"].includes(name)) args[name] = true;
+    if (["commit", "push", "help", "skip-monolith", "flat-parts"].includes(name)) args[name] = true;
     else {
       args[name] = argv[i + 1];
       i += 1;
@@ -55,6 +55,8 @@ async function main() {
   else buildArgs.push("--skip-monolith");
   if (splitOutput) buildArgs.push("--split-output", splitOutput);
   if (args["max-days"]) buildArgs.push("--max-days", args["max-days"]);
+  if (args["flat-parts"]) buildArgs.push("--flat-parts");
+  if (args["changes-output"]) buildArgs.push("--changes-output", args["changes-output"]);
   if (args.password) buildArgs.push("--password", args.password);
   run("node", buildArgs);
 
