@@ -146,6 +146,52 @@ class PrivateBundleTests(unittest.TestCase):
             for date in dates:
                 self.assertEqual(first_digests[date], (private / "digest" / f"{date}.enc").read_bytes())
 
+    def test_split_bundle_can_emit_flat_release_assets_and_change_list(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            data = root / "web" / "data"
+            private = root / "release"
+            changes = root / "changes.json"
+            (data / "day").mkdir(parents=True)
+            (data / "digest").mkdir(parents=True)
+            date = "2026-05-15"
+            (data / "index.json").write_text(json.dumps({
+                "sources": [],
+                "categories": [],
+                "days": [{"date": date, "items": 1, "cards": 0}],
+            }), encoding="utf-8")
+            (data / "day" / f"{date}.json").write_text(json.dumps({
+                "date": date, "cards": [], "items": [{"item_id": date, "title": date}],
+            }), encoding="utf-8")
+            (data / "digest" / "index.json").write_text(json.dumps({"dates": [date]}), encoding="utf-8")
+            (data / "digest" / f"{date}.json").write_text(
+                json.dumps({"date": date, "summary": date}), encoding="utf-8",
+            )
+            env = {**os.environ, "PRIVATE_BUNDLE_PASSWORD": "correct horse battery staple"}
+            command = [
+                "node", str(BUNDLE_SCRIPT),
+                "--input", str(data),
+                "--split-output", str(private),
+                "--skip-monolith",
+                "--flat-parts",
+                "--changes-output", str(changes),
+            ]
+
+            subprocess.run(command, check=True, env=env, cwd=ROOT)
+
+            self.assertTrue((private / f"day-{date}.enc").exists())
+            self.assertTrue((private / f"digest-{date}.enc").exists())
+            self.assertFalse((private / "day").exists())
+            change_payload = json.loads(changes.read_text(encoding="utf-8"))
+            self.assertEqual(
+                {f"day-{date}.enc", f"digest-{date}.enc", "manifest.enc"},
+                set(change_payload["changedFiles"]),
+            )
+
+            subprocess.run(command, check=True, env=env, cwd=ROOT)
+            change_payload = json.loads(changes.read_text(encoding="utf-8"))
+            self.assertEqual(["manifest.enc"], change_payload["changedFiles"])
+
     def test_frontend_has_private_unlock_flow(self):
         app = APP_JS.read_text(encoding="utf-8")
         html = INDEX_HTML.read_text(encoding="utf-8")
