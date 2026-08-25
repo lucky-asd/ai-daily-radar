@@ -80,6 +80,22 @@ function filterDigestIndex(index, dates) {
   return { ...(index || {}), dates: (index?.dates || []).filter((date) => allowed.has(date)) };
 }
 
+function buildSourceDays(index, days) {
+  const sourceDays = {};
+  for (const day of index?.days || []) {
+    const date = day?.date;
+    if (!date) continue;
+    const seen = new Set();
+    for (const item of days?.[date]?.items || []) {
+      const sourceID = item?._source;
+      if (!sourceID || seen.has(sourceID)) continue;
+      seen.add(sourceID);
+      (sourceDays[sourceID] ||= []).push(date);
+    }
+  }
+  return sourceDays;
+}
+
 async function readExternalDailyReports(input, dates) {
   const repoRoot = resolve(input, "..", "..");
   const allowed = new Set(dates);
@@ -256,6 +272,7 @@ async function writeSplitBundle(outputDir, payload, password, flatParts = false)
     digest_index: payload.digest_index,
     days: dayFiles,
     digests: digestFiles,
+    source_days: buildSourceDays(payload.index, payload.days),
   }, password);
   changedFiles.push("manifest.enc");
   return { changedDays, changedDigests, changedFiles, removedFiles };
