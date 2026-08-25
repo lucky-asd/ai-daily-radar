@@ -156,12 +156,14 @@ class PrivateBundleTests(unittest.TestCase):
             (data / "digest").mkdir(parents=True)
             date = "2026-05-15"
             (data / "index.json").write_text(json.dumps({
-                "sources": [],
+                "sources": [{"id": "wechat-one", "name": "公众号一"}],
                 "categories": [],
                 "days": [{"date": date, "items": 1, "cards": 0}],
             }), encoding="utf-8")
             (data / "day" / f"{date}.json").write_text(json.dumps({
-                "date": date, "cards": [], "items": [{"item_id": date, "title": date}],
+                "date": date,
+                "cards": [],
+                "items": [{"item_id": date, "title": date, "_source": "wechat-one"}],
             }), encoding="utf-8")
             (data / "digest" / "index.json").write_text(json.dumps({"dates": [date]}), encoding="utf-8")
             (data / "digest" / f"{date}.json").write_text(
@@ -187,6 +189,14 @@ class PrivateBundleTests(unittest.TestCase):
                 {f"day-{date}.enc", f"digest-{date}.enc", "manifest.enc"},
                 set(change_payload["changedFiles"]),
             )
+            decrypted_manifest = root / "manifest.json"
+            subprocess.run([
+                "node", str(ROOT / "scripts" / "decrypt-private-web-bundle.mjs"),
+                "--input", str(private / "manifest.enc"),
+                "--output", str(decrypted_manifest),
+            ], check=True, env=env, cwd=ROOT)
+            manifest = json.loads(decrypted_manifest.read_text(encoding="utf-8"))
+            self.assertEqual({"wechat-one": [date]}, manifest["source_days"])
 
             subprocess.run(command, check=True, env=env, cwd=ROOT)
             change_payload = json.loads(changes.read_text(encoding="utf-8"))
