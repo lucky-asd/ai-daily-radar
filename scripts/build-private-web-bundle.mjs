@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { createCipheriv, pbkdf2Sync, randomBytes } from "node:crypto";
-import { gzipSync } from "node:zlib";
+import { createCipheriv, createDecipheriv, pbkdf2Sync, randomBytes } from "node:crypto";
+import { gunzipSync, gzipSync } from "node:zlib";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
@@ -11,7 +11,12 @@ function parseArgs(argv) {
   for (let i = 2; i < argv.length; i += 1) {
     const key = argv[i];
     if (!key.startsWith("--")) continue;
-    args[key.slice(2)] = argv[i + 1];
+    const name = key.slice(2);
+    if (name === "skip-monolith") {
+      args[name] = true;
+      continue;
+    }
+    args[name] = argv[i + 1];
     i += 1;
   }
   return args;
@@ -118,6 +123,27 @@ function encryptJson(payload, password) {
   };
 }
 
+function decryptJson(envelope, password) {
+  const salt = Buffer.from(envelope.kdf.salt, "base64");
+  const iv = Buffer.from(envelope.iv, "base64");
+  const combined = Buffer.from(envelope.ciphertext, "base64");
+  const encrypted = combined.subarray(0, combined.length - 16);
+  const tag = combined.subarray(combined.length - 16);
+  const key = pbkdf2Sync(password, salt, envelope.kdf.iterations, 32, "sha256");
+  const decipher = createDecipheriv("aes-256-gcm", key, iv);
+  decipher.setAuthTag(tag);
+  const compressed = Buffer.concat([decipher.update(encrypted), decipher.final()]);
+  return JSON.parse(gunzipSync(compressed).toString("utf8"));
+}
+
+function stableJson(value) {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
 function buildPrivatePayload({ index, days, digestIndex, digests, selectedDates, externalReports, maxDays }) {
   const mergedDigests = mergeExternalReportsIntoDigests(digests, externalReports);
   return {
@@ -138,23 +164,61 @@ async function writeEncryptedJson(path, payload, password) {
   await writeFile(path, JSON.stringify(encryptJson(payload, password), null, 2) + "\n", "utf8");
 }
 
+async function writeEncryptedJsonIfChanged(path, payload, password) {
+  const current = await readJsonIfExists(path);
+  if (current) {
+    try {
+      if (stableJson(decryptJson(current, password)) === stableJson(payload)) return false;
+    } catch {
+      // Password or envelope changed; replace this part with a fresh envelope.
+    }
+  }
+  await writeEncryptedJson(path, payload, password);
+  return true;
+}
+
+async function removeUnselectedParts(dir, selectedFiles) {
+  const allowed = new Set(selectedFiles);
+  let entries = [];
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch (err) {
+    if (err?.code === "ENOENT") return;
+    throw err;
+  }
+  for (const entry of entries) {
+    if (entry.isFile() && entry.name.endsWith(".enc") && !allowed.has(entry.name)) {
+      await rm(join(dir, entry.name), { force: true });
+    }
+  }
+}
+
 async function writeSplitBundle(outputDir, payload, password) {
   await mkdir(outputDir, { recursive: true });
-  await rm(join(outputDir, "day"), { recursive: true, force: true });
-  await rm(join(outputDir, "digest"), { recursive: true, force: true });
 
   const dayFiles = {};
   const digestFiles = {};
+  let changedDays = 0;
+  let changedDigests = 0;
   for (const [date, day] of Object.entries(payload.days || {})) {
     const file = `day/${date}.enc`;
     dayFiles[date] = file;
-    await writeEncryptedJson(join(outputDir, file), day || { date, cards: [], items: [] }, password);
+    if (await writeEncryptedJsonIfChanged(
+      join(outputDir, file),
+      day || { date, cards: [], items: [] },
+      password,
+    )) changedDays += 1;
   }
   for (const [date, digest] of Object.entries(payload.digests || {})) {
     const file = `digest/${date}.enc`;
     digestFiles[date] = file;
-    await writeEncryptedJson(join(outputDir, file), digest || { date }, password);
+    if (await writeEncryptedJsonIfChanged(join(outputDir, file), digest || { date }, password)) {
+      changedDigests += 1;
+    }
   }
+
+  await removeUnselectedParts(join(outputDir, "day"), Object.values(dayFiles).map((file) => file.split("/").pop()));
+  await removeUnselectedParts(join(outputDir, "digest"), Object.values(digestFiles).map((file) => file.split("/").pop()));
 
   await writeEncryptedJson(join(outputDir, "manifest.enc"), {
     version: 1,
@@ -166,12 +230,13 @@ async function writeSplitBundle(outputDir, payload, password) {
     days: dayFiles,
     digests: digestFiles,
   }, password);
+  return { changedDays, changedDigests };
 }
 
 async function main() {
   const args = parseArgs(process.argv);
   const input = args.input || "web/data";
-  const output = args.output || "web/private/private.enc";
+  const output = args["skip-monolith"] ? null : (args.output || "web/private/private.enc");
   const splitOutput = args["split-output"] || args.splitOutput;
   const password = process.env.PRIVATE_BUNDLE_PASSWORD || args.password;
   const maxDays = parsePositiveInt(args["max-days"] || args.maxDays);
@@ -192,8 +257,11 @@ async function main() {
     console.log(`Wrote encrypted private bundle: ${output}`);
   }
   if (splitOutput) {
-    await writeSplitBundle(splitOutput, payload, password);
-    console.log(`Wrote split private bundle: ${splitOutput}`);
+    const changes = await writeSplitBundle(splitOutput, payload, password);
+    console.log(
+      `Wrote split private bundle: ${splitOutput} `
+      + `(changed days: ${changes.changedDays}, digests: ${changes.changedDigests})`,
+    );
   }
 }
 
