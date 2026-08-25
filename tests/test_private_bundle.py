@@ -93,6 +93,59 @@ class PrivateBundleTests(unittest.TestCase):
             self.assertEqual({"2026-05-15", "2026-05-14"}, set(payload["days"].keys()))
             self.assertEqual(["2026-05-15", "2026-05-14"], payload["digest_index"]["dates"])
 
+    def test_split_bundle_reuses_unchanged_encrypted_parts(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            data = root / "web" / "data"
+            private = root / "web" / "private"
+            (data / "day").mkdir(parents=True)
+            (data / "digest").mkdir(parents=True)
+            dates = ["2026-05-15", "2026-05-14"]
+            (data / "index.json").write_text(json.dumps({
+                "sources": [],
+                "categories": [],
+                "days": [{"date": date, "items": 1, "cards": 0} for date in dates],
+            }), encoding="utf-8")
+            (data / "digest" / "index.json").write_text(json.dumps({"dates": dates}), encoding="utf-8")
+            for date in dates:
+                (data / "day" / f"{date}.json").write_text(json.dumps({
+                    "date": date,
+                    "cards": [],
+                    "items": [{"item_id": date, "title": date}],
+                }), encoding="utf-8")
+                (data / "digest" / f"{date}.json").write_text(
+                    json.dumps({"date": date, "summary": date}),
+                    encoding="utf-8",
+                )
+
+            env = {**os.environ, "PRIVATE_BUNDLE_PASSWORD": "correct horse battery staple"}
+            command = [
+                "node", str(BUNDLE_SCRIPT),
+                "--input", str(data),
+                "--split-output", str(private),
+                "--skip-monolith",
+            ]
+            subprocess.run(command, check=True, env=env, cwd=ROOT)
+            first_days = {date: (private / "day" / f"{date}.enc").read_bytes() for date in dates}
+            first_digests = {date: (private / "digest" / f"{date}.enc").read_bytes() for date in dates}
+            self.assertFalse((private / "private.enc").exists())
+
+            subprocess.run(command, check=True, env=env, cwd=ROOT)
+            for date in dates:
+                self.assertEqual(first_days[date], (private / "day" / f"{date}.enc").read_bytes())
+                self.assertEqual(first_digests[date], (private / "digest" / f"{date}.enc").read_bytes())
+
+            changed_date = dates[0]
+            payload = json.loads((data / "day" / f"{changed_date}.json").read_text(encoding="utf-8"))
+            payload["items"][0]["title"] = "changed"
+            (data / "day" / f"{changed_date}.json").write_text(json.dumps(payload), encoding="utf-8")
+            subprocess.run(command, check=True, env=env, cwd=ROOT)
+
+            self.assertNotEqual(first_days[changed_date], (private / "day" / f"{changed_date}.enc").read_bytes())
+            self.assertEqual(first_days[dates[1]], (private / "day" / f"{dates[1]}.enc").read_bytes())
+            for date in dates:
+                self.assertEqual(first_digests[date], (private / "digest" / f"{date}.enc").read_bytes())
+
     def test_frontend_has_private_unlock_flow(self):
         app = APP_JS.read_text(encoding="utf-8")
         html = INDEX_HTML.read_text(encoding="utf-8")

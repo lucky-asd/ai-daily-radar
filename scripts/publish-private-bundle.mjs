@@ -13,7 +13,7 @@ function parseArgs(argv) {
     const key = argv[i];
     if (!key.startsWith("--")) continue;
     const name = key.slice(2);
-    if (["commit", "push", "help"].includes(name)) args[name] = true;
+    if (["commit", "push", "help", "skip-monolith"].includes(name)) args[name] = true;
     else {
       args[name] = argv[i + 1];
       i += 1;
@@ -35,7 +35,7 @@ function runGit(args, options = {}) {
 }
 
 function usage() {
-  return `Usage:\n  PRIVATE_BUNDLE_PASSWORD='...' node scripts/publish-private-bundle.mjs [--input web/data] [--output web/private/private.enc] [--split-output web/private] [--commit] [--push]\n\nThis builds the encrypted private bundle, optionally commits it with git, and optionally pushes it.\nThe site prefers the split bundle at ${DEFAULT_SPLIT_OUTPUT}/manifest.enc and keeps ${DEFAULT_OUTPUT} as a fallback.\nDo not commit raw web/data or secrets.\n`;
+  return `Usage:\n  PRIVATE_BUNDLE_PASSWORD='...' node scripts/publish-private-bundle.mjs [--input web/data] [--output web/private/private.enc] [--split-output web/private] [--skip-monolith] [--commit] [--push]\n\nThis builds the encrypted private bundle, optionally commits it with git, and optionally pushes it.\nThe site prefers the incremental split bundle at ${DEFAULT_SPLIT_OUTPUT}/manifest.enc. Use --skip-monolith for routine publishing; ${DEFAULT_OUTPUT} remains an optional compatibility fallback.\nDo not commit raw web/data or secrets.\n`;
 }
 
 async function main() {
@@ -48,16 +48,18 @@ async function main() {
     throw new Error("请设置 PRIVATE_BUNDLE_PASSWORD，或传入 --password。");
   }
   const input = args.input || "web/data";
-  const output = args.output || DEFAULT_OUTPUT;
+  const output = args["skip-monolith"] ? null : (args.output || DEFAULT_OUTPUT);
   const splitOutput = args["split-output"] || args.splitOutput || DEFAULT_SPLIT_OUTPUT;
-  const buildArgs = [`${__dirname}/build-private-web-bundle.mjs`, "--input", input, "--output", output];
+  const buildArgs = [`${__dirname}/build-private-web-bundle.mjs`, "--input", input];
+  if (output) buildArgs.push("--output", output);
+  else buildArgs.push("--skip-monolith");
   if (splitOutput) buildArgs.push("--split-output", splitOutput);
   if (args["max-days"]) buildArgs.push("--max-days", args["max-days"]);
   if (args.password) buildArgs.push("--password", args.password);
   run("node", buildArgs);
 
   if (args.commit || args.push) {
-    run("git", ["add", output]);
+    if (output) run("git", ["add", output]);
     if (splitOutput) run("git", ["add", splitOutput]);
   }
   if (args.commit) {
