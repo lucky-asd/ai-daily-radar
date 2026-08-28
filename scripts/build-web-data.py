@@ -164,7 +164,16 @@ def build(date_filter=None):
 
     index = {
         "generated_at": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
-        "sources": [{"id": s["id"], "name": s.get("name", s["id"])} for s in sources],
+        # 客户端靠 category / kind 给频道分组，只给 id + name 的话就没法分。
+        "sources": [
+            {
+                "id": s["id"],
+                "name": s.get("name", s["id"]),
+                "category": (s.get("config") or {}).get("category"),
+                "kind": s.get("type"),
+            }
+            for s in sources
+        ],
         "categories": categories,
         "days": days,
     }
