@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { createCipheriv, createDecipheriv, pbkdf2Sync, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, pbkdf2Sync, randomBytes } from "node:crypto";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
@@ -136,6 +136,7 @@ function encryptJson(payload, password) {
     },
     iv: iv.toString("base64"),
     ciphertext: Buffer.concat([encrypted, tag]).toString("base64"),
+    content_sha256: createHash("sha256").update(stableJson(payload)).digest("hex"),
   };
 }
 
@@ -183,14 +184,87 @@ async function writeEncryptedJson(path, payload, password) {
 async function writeEncryptedJsonIfChanged(path, payload, password) {
   const current = await readJsonIfExists(path);
   if (current) {
+    const contentHash = createHash("sha256").update(stableJson(payload)).digest("hex");
+    if (current.content_sha256 === contentHash) return false;
     try {
-      if (stableJson(decryptJson(current, password)) === stableJson(payload)) return false;
+      if (!current.content_sha256 && stableJson(decryptJson(current, password)) === stableJson(payload)) return false;
     } catch {
       // Password or envelope changed; replace this part with a fresh envelope.
     }
   }
   await writeEncryptedJson(path, payload, password);
   return true;
+}
+
+function itemMonth(item, fallbackDate) {
+  for (const value of [item?.published_at, item?.date, fallbackDate]) {
+    const match = String(value || "").match(/^(\d{4}-\d{2})/);
+    if (match) return match[1];
+  }
+  return null;
+}
+
+function itemTimestamp(item) {
+  return String(item?.published_at || item?.date || "");
+}
+
+function buildSourceArchivePayloads(index, sourceHistoryDays) {
+  const sourceIDs = new Set(
+    (index?.sources || [])
+      .filter((source) => source?.category === "公众号")
+      .map((source) => source?.id)
+      .filter(Boolean),
+  );
+  const groups = new Map();
+  const seen = new Set();
+  for (const date of Object.keys(sourceHistoryDays || {}).sort().reverse()) {
+    for (const item of sourceHistoryDays?.[date]?.items || []) {
+      const sourceID = item?._source;
+      if (!sourceIDs.has(sourceID)) continue;
+      const itemID = item?.item_id || item?.url;
+      const dedupeKey = `${sourceID}\u0000${itemID || stableJson(item)}`;
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+      const month = itemMonth(item, date);
+      if (!month) continue;
+      const key = `${sourceID}\u0000${month}`;
+      if (!groups.has(key)) groups.set(key, { sourceID, month, items: [] });
+      groups.get(key).items.push(item);
+    }
+  }
+  return [...groups.values()]
+    .map((group) => ({
+      ...group,
+      items: group.items.sort((a, b) => itemTimestamp(b).localeCompare(itemTimestamp(a))),
+    }))
+    .sort((a, b) => a.sourceID.localeCompare(b.sourceID) || b.month.localeCompare(a.month));
+}
+
+async function writeSourceArchives(outputDir, index, sourceHistoryDays, password, flatParts) {
+  const sourceArchives = {};
+  const sourceFiles = [];
+  const changedFiles = [];
+  for (const archive of buildSourceArchivePayloads(index, sourceHistoryDays)) {
+    const safeID = archive.sourceID.replace(/[^A-Za-z0-9._-]/g, "-");
+    const file = flatParts
+      ? `source-${safeID}-${archive.month}.enc`
+      : `source/${safeID}/${archive.month}.enc`;
+    sourceFiles.push(file);
+    (sourceArchives[archive.sourceID] ||= []).push({
+      month: archive.month,
+      file,
+      count: archive.items.length,
+    });
+    if (await writeEncryptedJsonIfChanged(join(outputDir, file), {
+      source_id: archive.sourceID,
+      month: archive.month,
+      items: archive.items,
+    }, password)) changedFiles.push(file);
+  }
+  const removedFiles = flatParts
+    ? await removeUnselectedParts(outputDir, sourceFiles, (name) => name.startsWith("source-"))
+    : [];
+  return { sourceArchives, changedFiles, removedFiles };
 }
 
 async function removeUnselectedParts(dir, selectedFiles, shouldManage = () => true) {
@@ -212,7 +286,7 @@ async function removeUnselectedParts(dir, selectedFiles, shouldManage = () => tr
   return removed;
 }
 
-async function writeSplitBundle(outputDir, payload, password, flatParts = false) {
+async function writeSplitBundle(outputDir, payload, password, flatParts = false, sourceHistoryDays = {}) {
   await mkdir(outputDir, { recursive: true });
 
   const dayFiles = {};
@@ -232,6 +306,15 @@ async function writeSplitBundle(outputDir, payload, password, flatParts = false)
       changedFiles.push(file);
     }
   }
+
+  const sourceResult = await writeSourceArchives(
+    outputDir,
+    payload.index,
+    sourceHistoryDays,
+    password,
+    flatParts,
+  );
+  changedFiles.push(...sourceResult.changedFiles);
   for (const [date, digest] of Object.entries(payload.digests || {})) {
     const file = flatParts ? `digest-${date}.enc` : `digest/${date}.enc`;
     digestFiles[date] = file;
@@ -248,6 +331,7 @@ async function writeSplitBundle(outputDir, payload, password, flatParts = false)
       [...Object.values(dayFiles), ...Object.values(digestFiles)],
       (name) => name.startsWith("day-") || name.startsWith("digest-"),
     );
+    removedFiles.push(...sourceResult.removedFiles);
   } else {
     const removedDays = await removeUnselectedParts(
       join(outputDir, "day"),
@@ -273,9 +357,16 @@ async function writeSplitBundle(outputDir, payload, password, flatParts = false)
     days: dayFiles,
     digests: digestFiles,
     source_days: buildSourceDays(payload.index, payload.days),
+    source_archives: sourceResult.sourceArchives,
   }, password);
   changedFiles.push("manifest.enc");
-  return { changedDays, changedDigests, changedFiles, removedFiles };
+  return {
+    changedDays,
+    changedDigests,
+    changedSourceArchives: sourceResult.changedFiles.length,
+    changedFiles,
+    removedFiles,
+  };
 }
 
 async function main() {
@@ -285,6 +376,7 @@ async function main() {
   const splitOutput = args["split-output"] || args.splitOutput;
   const password = process.env.PRIVATE_BUNDLE_PASSWORD || args.password;
   const maxDays = parsePositiveInt(args["max-days"] || args.maxDays);
+  const sourceHistoryMaxDays = parsePositiveInt(args["source-history-days"] || args.sourceHistoryDays);
   const flatParts = args["flat-parts"] === true;
   if (!password) {
     throw new Error("请设置 PRIVATE_BUNDLE_PASSWORD，或传入 --password。");
@@ -295,6 +387,9 @@ async function main() {
   const digestIndex = await readJsonIfExists(join(input, "digest", "index.json"), { dates: [] });
   const digests = await readJsonDir(join(input, "digest"));
   const selectedDates = selectRecentDates(index, days, maxDays);
+  const sourceHistoryDates = sourceHistoryMaxDays > 0
+    ? selectRecentDates(index, days, sourceHistoryMaxDays)
+    : [];
   const externalReports = await readExternalDailyReports(input, selectedDates);
   const payload = buildPrivatePayload({ index, days, digestIndex, digests, selectedDates, externalReports, maxDays });
 
@@ -303,7 +398,13 @@ async function main() {
     console.log(`Wrote encrypted private bundle: ${output}`);
   }
   if (splitOutput) {
-    const changes = await writeSplitBundle(splitOutput, payload, password, flatParts);
+    const changes = await writeSplitBundle(
+      splitOutput,
+      payload,
+      password,
+      flatParts,
+      filterObjectByDates(days, sourceHistoryDates),
+    );
     console.log(
       `Wrote split private bundle: ${splitOutput} `
       + `(changed days: ${changes.changedDays}, digests: ${changes.changedDigests})`,

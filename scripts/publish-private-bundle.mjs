@@ -55,6 +55,9 @@ async function main() {
   else buildArgs.push("--skip-monolith");
   if (splitOutput) buildArgs.push("--split-output", splitOutput);
   if (args["max-days"]) buildArgs.push("--max-days", args["max-days"]);
+  if (args["source-history-days"]) {
+    buildArgs.push("--source-history-days", args["source-history-days"]);
+  }
   if (args["flat-parts"]) buildArgs.push("--flat-parts");
   if (args["changes-output"]) buildArgs.push("--changes-output", args["changes-output"]);
   if (args.password) buildArgs.push("--password", args.password);
